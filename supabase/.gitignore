@@ -1,0 +1,4 @@
+# Supabase CLI が自動生成するファイルは除外
+.branches
+.temp
+.env

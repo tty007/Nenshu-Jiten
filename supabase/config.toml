@@ -1,0 +1,3 @@
+# Supabase CLI 設定（最低限）
+# プロジェクトとのリンクは `supabase link --project-ref <ref>` で行う
+project_id = "nenshu-jiten"

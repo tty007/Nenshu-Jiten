@@ -13,8 +13,7 @@ import {
   defaultStyles,
   useTooltip,
 } from "@visx/tooltip";
-import { useMemo } from "react";
-import { formatYen } from "@/lib/utils";
+import { useEffect, useMemo, useRef } from "react";
 import type { BrandColor } from "@/types";
 
 export type EarningsDatum = {
@@ -28,7 +27,45 @@ const COLOR_OPERATING = "#111827";
 const COLOR_ORDINARY = "#6B7280";
 const COLOR_ZERO_LINE = "#DC2626";
 
-const margin = { top: 16, right: 80, bottom: 36, left: 80 };
+const COMPACT_BREAKPOINT = 480;
+
+type YenUnit = "oku" | "man" | "yen";
+
+function pickYenUnit(values: number[]): YenUnit {
+  const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v))) : 0;
+  if (maxAbs >= 100_000_000) return "oku";
+  if (maxAbs >= 10_000) return "man";
+  return "yen";
+}
+
+function formatYenAxis(value: number, unit: YenUnit): string {
+  if (value === 0) return "0";
+  if (unit === "oku") {
+    const v = value / 100_000_000;
+    const decimals = Math.abs(v) >= 10 ? 0 : 1;
+    return `${v.toFixed(decimals)}億`;
+  }
+  if (unit === "man") {
+    return `${Math.round(value / 10_000).toLocaleString("ja-JP")}万`;
+  }
+  return value.toLocaleString("ja-JP");
+}
+
+function formatYenWithUnit(value: number, unit: YenUnit): string {
+  if (unit === "oku") {
+    return `${(value / 100_000_000).toFixed(1)}億円`;
+  }
+  if (unit === "man") {
+    return `${Math.round(value / 10_000).toLocaleString("ja-JP")}万円`;
+  }
+  return `${value.toLocaleString("ja-JP")}円`;
+}
+
+function unitLabel(unit: YenUnit): string {
+  if (unit === "oku") return "億円";
+  if (unit === "man") return "万円";
+  return "円";
+}
 
 const tooltipStyles: React.CSSProperties = {
   ...defaultStyles,
@@ -112,6 +149,13 @@ function ChartInner({
   data: EarningsDatum[];
   brandColor: BrandColor;
 }) {
+  const isCompact = width < COMPACT_BREAKPOINT;
+  const margin = {
+    top: 16,
+    right: isCompact ? 40 : 80,
+    bottom: 36,
+    left: isCompact ? 40 : 80,
+  };
   const innerWidth = Math.max(0, width - margin.left - margin.right);
   const innerHeight = Math.max(0, height - margin.top - margin.bottom);
 
@@ -180,6 +224,28 @@ function ChartInner({
     [operatingPoints, ordinaryPoints]
   );
 
+  const leftUnit = useMemo(
+    () => pickYenUnit(revenuePoints.map((d) => d.revenue)),
+    [revenuePoints]
+  );
+  const rightUnit = useMemo(
+    () =>
+      pickYenUnit([
+        ...operatingPoints.map((d) => d.operatingIncome),
+        ...ordinaryPoints.map((d) => d.ordinaryIncome),
+      ]),
+    [operatingPoints, ordinaryPoints]
+  );
+  const tooltipUnit = useMemo(
+    () =>
+      pickYenUnit([
+        ...revenuePoints.map((d) => d.revenue),
+        ...operatingPoints.map((d) => d.operatingIncome),
+        ...ordinaryPoints.map((d) => d.ordinaryIncome),
+      ]),
+    [revenuePoints, operatingPoints, ordinaryPoints]
+  );
+
   const lineX = (d: EarningsDatum) =>
     (xScale(d.fiscalYear) ?? 0) + xScale.bandwidth() / 2;
 
@@ -192,7 +258,10 @@ function ChartInner({
     hideTooltip,
   } = useTooltip<EarningsDatum>();
 
-  function handlePointer(event: React.PointerEvent<SVGRectElement>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isTouchRef = useRef(false);
+
+  function updateTooltipFromEvent(event: React.PointerEvent<SVGRectElement>) {
     const point = localPoint(event);
     if (!point) return;
     const x = point.x - margin.left;
@@ -215,10 +284,32 @@ function ChartInner({
     });
   }
 
+  function handlePointerDown(event: React.PointerEvent<SVGRectElement>) {
+    isTouchRef.current = event.pointerType === "touch";
+    updateTooltipFromEvent(event);
+  }
+
+  function handlePointerLeave() {
+    if (!isTouchRef.current) hideTooltip();
+  }
+
+  useEffect(() => {
+    if (!tooltipOpen || !isTouchRef.current) return;
+    function handleOutside(e: PointerEvent) {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) {
+        hideTooltip();
+        isTouchRef.current = false;
+      }
+    }
+    document.addEventListener("pointerdown", handleOutside);
+    return () => document.removeEventListener("pointerdown", handleOutside);
+  }, [tooltipOpen, hideTooltip]);
+
   const rightBaselineY = yRightScale(0);
 
   return (
-    <div className="relative h-full w-full">
+    <div ref={containerRef} className="relative h-full w-full">
       <svg
         width={width}
         height={height}
@@ -244,7 +335,7 @@ function ChartInner({
             numTicks={5}
             stroke="#9CA3AF"
             tickStroke="#9CA3AF"
-            tickFormat={(v) => formatYen(Number(v))}
+            tickFormat={(v) => formatYenAxis(Number(v), leftUnit)}
             tickLabelProps={() => ({
               fill: "#6B7280",
               fontSize: 11,
@@ -259,7 +350,7 @@ function ChartInner({
             numTicks={5}
             stroke="#9CA3AF"
             tickStroke="#9CA3AF"
-            tickFormat={(v) => formatYen(Number(v))}
+            tickFormat={(v) => formatYenAxis(Number(v), rightUnit)}
             tickLabelProps={() => ({
               fill: "#6B7280",
               fontSize: 11,
@@ -268,6 +359,24 @@ function ChartInner({
               dy: 3,
             })}
           />
+          <text
+            x={0}
+            y={-4}
+            fontSize={10}
+            fill="#9CA3AF"
+            textAnchor="end"
+          >
+            ({unitLabel(leftUnit)})
+          </text>
+          <text
+            x={innerWidth}
+            y={-4}
+            fontSize={10}
+            fill="#9CA3AF"
+            textAnchor="start"
+          >
+            ({unitLabel(rightUnit)})
+          </text>
           <AxisBottom
             scale={xScale}
             top={innerHeight}
@@ -373,8 +482,10 @@ function ChartInner({
             width={innerWidth}
             height={innerHeight}
             fill="transparent"
-            onPointerMove={handlePointer}
-            onPointerLeave={hideTooltip}
+            style={{ touchAction: "pan-y" }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={updateTooltipFromEvent}
+            onPointerLeave={handlePointerLeave}
           />
         </Group>
       </svg>
@@ -399,7 +510,7 @@ function ChartInner({
               売上高
             </span>
             <span className="text-right font-numeric font-semibold tabular-nums">
-              {tooltipData.revenue !== null ? formatYen(tooltipData.revenue) : "—"}
+              {tooltipData.revenue !== null ? formatYenWithUnit(tooltipData.revenue, tooltipUnit) : "—"}
             </span>
             <span className="flex items-center gap-1.5">
               <span
@@ -411,7 +522,7 @@ function ChartInner({
             </span>
             <span className="text-right font-numeric font-semibold tabular-nums">
               {tooltipData.operatingIncome !== null
-                ? formatYen(tooltipData.operatingIncome)
+                ? formatYenWithUnit(tooltipData.operatingIncome, tooltipUnit)
                 : "—"}
             </span>
             <span className="flex items-center gap-1.5">
@@ -424,7 +535,7 @@ function ChartInner({
             </span>
             <span className="text-right font-numeric font-semibold tabular-nums">
               {tooltipData.ordinaryIncome !== null
-                ? formatYen(tooltipData.ordinaryIncome)
+                ? formatYenWithUnit(tooltipData.ordinaryIncome, tooltipUnit)
                 : "—"}
             </span>
           </div>

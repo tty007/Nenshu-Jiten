@@ -308,7 +308,7 @@ export default async function CompanyDetailPage({
         )}
 
         {earningsTrend.length > 0 && (
-          <section className="mt-8 rounded-2xl border border-surface-border bg-white p-6 sm:p-8">
+          <section className="mt-8 rounded-2xl border border-surface-border bg-white px-3 py-4 sm:p-8">
             <div className="flex items-end justify-between">
               <div>
                 <h2 className="text-lg font-bold tracking-tight text-ink sm:text-xl">

@@ -172,7 +172,7 @@ export function extractFinancialFacts(facts: Map<string, XbrlFact>): FinancialFa
   if (fyStart) fiscalYear = Number(fyStart.slice(0, 4));
   else if (fyEnd) fiscalYear = Number(fyEnd.slice(0, 4)) - 1;
 
-  const averageAnnualSalary = pickNumber(facts, [
+  const rawAverageAnnualSalary = pickNumber(facts, [
     {
       element:
         "jpcrp_cor:AverageAnnualSalaryInformationAboutReportingCompanyInformationAboutEmployees",
@@ -184,6 +184,24 @@ export function extractFinancialFacts(facts: Map<string, XbrlFact>): FinancialFa
       context: CUR_INSTANT,
     },
   ]);
+  // 上場企業の平均年収レンジに基づく妥当性チェック:
+  //   - 一般的な範囲は 200万〜2000万。上限 5000万を超えれば確実に異常値
+  //   - 10万円未満 → 千円単位での誤入力が疑わしい(例: 7379 → 7379千円)。
+  //     ×1000 して再判定し、妥当範囲なら補正、外れたら null。
+  const SALARY_MIN = 1_000_000; // 100万円
+  const SALARY_MAX = 50_000_000; // 5000万円
+  let averageAnnualSalary: number | null = rawAverageAnnualSalary;
+  if (averageAnnualSalary !== null) {
+    if (averageAnnualSalary < 100_000) {
+      const corrected = averageAnnualSalary * 1000;
+      averageAnnualSalary =
+        corrected >= SALARY_MIN && corrected <= SALARY_MAX ? corrected : null;
+    } else if (averageAnnualSalary > SALARY_MAX) {
+      averageAnnualSalary = null;
+    } else if (averageAnnualSalary < SALARY_MIN) {
+      averageAnnualSalary = null;
+    }
+  }
 
   const averageAge = pickNumber(facts, [
     {

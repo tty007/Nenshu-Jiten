@@ -152,30 +152,38 @@ async function fetchAllPaginated<T>(
   return out;
 }
 
+// 大量のIDを .in() に渡すと URLが16KB を超えてエラーになるため、チャンク分割で取得する。
+async function fetchMetricsByCompanyIds(ids: string[]): Promise<DbMetric[]> {
+  if (ids.length === 0) return [];
+  const sb = client();
+  const CHUNK = 100; // 100社×5年 = 最大500行/req（Supabase 1000行制限内）
+  const out: DbMetric[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const { data, error } = await sb
+      .from("financial_metrics")
+      .select(METRIC_SELECT)
+      .in("company_id", chunk)
+      .order("id");
+    if (error) throw error;
+    out.push(...((data ?? []) as DbMetric[]));
+  }
+  return out;
+}
+
 export const getAllCompanies = cache(async (): Promise<CompanyWithLatestMetrics[]> => {
   const sb = client();
-  const [companies, metrics] = await Promise.all([
-    fetchAllPaginated<DbCompany>((from, to) =>
-      sb
-        .from("companies")
-        .select(COMPANY_SELECT)
-        .order("name")
-        .range(from, to) as unknown as PromiseLike<{
-        data: DbCompany[] | null;
-        error: { message: string } | null;
-      }>
-    ),
-    fetchAllPaginated<DbMetric>((from, to) =>
-      sb
-        .from("financial_metrics")
-        .select(METRIC_SELECT)
-        .order("id")
-        .range(from, to) as unknown as PromiseLike<{
-        data: DbMetric[] | null;
-        error: { message: string } | null;
-      }>
-    ),
-  ]);
+  const companies = await fetchAllPaginated<DbCompany>((from, to) =>
+    sb
+      .from("companies")
+      .select(COMPANY_SELECT)
+      .order("name")
+      .range(from, to) as unknown as PromiseLike<{
+      data: DbCompany[] | null;
+      error: { message: string } | null;
+    }>
+  );
+  const metrics = await fetchMetricsByCompanyIds(companies.map((c) => c.id));
   return combine(companies, metrics);
 });
 
@@ -283,18 +291,7 @@ export async function searchCompaniesPaged(
     return { items: [], total: count ?? 0, page, pageSize, totalPages: 0 };
   }
 
-  const ids = dbCompanies.map((c) => c.id);
-  const metrics = await fetchAllPaginated<DbMetric>((mfrom, mto) =>
-    sb
-      .from("financial_metrics")
-      .select(METRIC_SELECT)
-      .in("company_id", ids)
-      .order("id")
-      .range(mfrom, mto) as unknown as PromiseLike<{
-      data: DbMetric[] | null;
-      error: { message: string } | null;
-    }>
-  );
+  const metrics = await fetchMetricsByCompanyIds(dbCompanies.map((c) => c.id));
 
   return {
     items: combine(dbCompanies, metrics),
@@ -330,29 +327,13 @@ export async function getRecentCompanies(
   }
   if (ids.length === 0) return [];
 
-  const [companies, metrics] = await Promise.all([
-    fetchAllPaginated<DbCompany>((from, to) =>
-      sb
-        .from("companies")
-        .select(COMPANY_SELECT)
-        .in("id", ids)
-        .range(from, to) as unknown as PromiseLike<{
-        data: DbCompany[] | null;
-        error: { message: string } | null;
-      }>
-    ),
-    fetchAllPaginated<DbMetric>((from, to) =>
-      sb
-        .from("financial_metrics")
-        .select(METRIC_SELECT)
-        .in("company_id", ids)
-        .order("id")
-        .range(from, to) as unknown as PromiseLike<{
-        data: DbMetric[] | null;
-        error: { message: string } | null;
-      }>
-    ),
-  ]);
+  const { data: companiesData, error: cErr } = await sb
+    .from("companies")
+    .select(COMPANY_SELECT)
+    .in("id", ids);
+  if (cErr) throw cErr;
+  const companies = (companiesData ?? []) as unknown as DbCompany[];
+  const metrics = await fetchMetricsByCompanyIds(ids);
 
   // ids の順序を保つ
   const byId = new Map(companies.map((c) => [c.id, c]));
@@ -387,54 +368,60 @@ export async function searchCompanies(
     }>
   );
   if (companies.length === 0) return [];
-  const ids = companies.map((c) => c.id);
-  const metrics = await fetchAllPaginated<DbMetric>((from, to) =>
-    sb
-      .from("financial_metrics")
-      .select(METRIC_SELECT)
-      .in("company_id", ids)
-      .order("id")
-      .range(from, to) as unknown as PromiseLike<{
-      data: DbMetric[] | null;
-      error: { message: string } | null;
-    }>
-  );
+  const metrics = await fetchMetricsByCompanyIds(companies.map((c) => c.id));
   return combine(companies, metrics);
 }
 
 export async function getCompaniesByIndustry(
   industryCode: string,
-  excludeId?: string
+  excludeId?: string,
+  limit?: number
 ): Promise<CompanyWithLatestMetrics[]> {
   const sb = client();
-  const companies = await fetchAllPaginated<DbCompany>((from, to) =>
-    sb
-      .from("companies")
-      .select(COMPANY_SELECT)
-      .eq("industry_code", industryCode)
-      .order("name")
-      .range(from, to) as unknown as PromiseLike<{
-      data: DbCompany[] | null;
-      error: { message: string } | null;
-    }>
-  );
-  const filtered = excludeId
-    ? companies.filter((c) => c.id !== excludeId)
-    : companies;
-  if (filtered.length === 0) return [];
-  const ids = filtered.map((c) => c.id);
-  const metrics = await fetchAllPaginated<DbMetric>((from, to) =>
-    sb
-      .from("financial_metrics")
-      .select(METRIC_SELECT)
-      .in("company_id", ids)
-      .order("id")
-      .range(from, to) as unknown as PromiseLike<{
-      data: DbMetric[] | null;
-      error: { message: string } | null;
-    }>
-  );
-  return combine(filtered, metrics);
+  let q = sb
+    .from("companies")
+    .select(COMPANY_SELECT)
+    .eq("industry_code", industryCode)
+    .order("latest_avg_salary", { ascending: false, nullsFirst: false });
+  if (excludeId) q = q.neq("id", excludeId);
+  if (limit) q = q.limit(limit);
+
+  const companies = limit
+    ? (await q).data
+    : await fetchAllPaginated<DbCompany>((from, to) =>
+        q.range(from, to) as unknown as PromiseLike<{
+          data: DbCompany[] | null;
+          error: { message: string } | null;
+        }>
+      );
+  if (!companies || companies.length === 0) return [];
+  const dbCompanies = companies as unknown as DbCompany[];
+  const metrics = await fetchMetricsByCompanyIds(dbCompanies.map((c) => c.id));
+  return combine(dbCompanies, metrics);
+}
+
+// 業種内ランキングを 2 つの COUNT クエリで取得する（4000社相当の集合でもURL長制限に当たらない）。
+export async function getCompanyRankInIndustry(
+  companyId: string,
+  industryCode: string,
+  companyLatestSalary: number | null
+): Promise<{ rank: number; total: number }> {
+  const sb = client();
+  const totalP = sb
+    .from("companies")
+    .select("id", { count: "exact", head: true })
+    .eq("industry_code", industryCode);
+  const aboveP = sb
+    .from("companies")
+    .select("id", { count: "exact", head: true })
+    .eq("industry_code", industryCode)
+    .neq("id", companyId)
+    .gt("latest_avg_salary", companyLatestSalary ?? 0);
+  const [{ count: total }, { count: above }] = await Promise.all([totalP, aboveP]);
+  // 自社平均年収が NULL の場合はランク外（=末尾）扱い
+  const rank =
+    companyLatestSalary === null ? (total ?? 1) : (above ?? 0) + 1;
+  return { rank, total: total ?? 1 };
 }
 
 export const getAllIndustries = cache(async (): Promise<Industry[]> => {

@@ -15,6 +15,7 @@ import {
   getAllCompanies,
   getCompaniesByIndustry,
   getCompanyByEdinetCode,
+  getCompanyRankInIndustry,
 } from "@/lib/data/companies";
 import {
   getIndustryAverage,
@@ -70,7 +71,7 @@ export default async function CompanyDetailPage({
   const indHistory = await getIndustryAverageHistory(company.industryCode);
 
   const peers = company.industryCode
-    ? (await getCompaniesByIndustry(company.industryCode, company.id)).slice(0, 5)
+    ? await getCompaniesByIndustry(company.industryCode, company.id, 5)
     : [];
 
   const mhlw = await getMhlwForCompany(company.id);
@@ -140,18 +141,13 @@ export default async function CompanyDetailPage({
       ordinaryIncome: m.ordinaryIncome,
     }));
 
-  const peerRank = await (async () => {
-    if (!company.industryCode) return { rank: 1, total: 1 };
-    const same = await getCompaniesByIndustry(company.industryCode);
-    const allInIndustry = [...same, company];
-    const sorted = allInIndustry.sort(
-      (a, b) =>
-        (b.latest.averageAnnualSalary ?? -Infinity) -
-        (a.latest.averageAnnualSalary ?? -Infinity)
-    );
-    const rank = sorted.findIndex((c) => c.id === company.id) + 1;
-    return { rank, total: sorted.length };
-  })();
+  const peerRank = company.industryCode
+    ? await getCompanyRankInIndustry(
+        company.id,
+        company.industryCode,
+        latest.averageAnnualSalary
+      )
+    : { rank: 1, total: 1 };
 
   const submittedDate = latest.submittedAt ? new Date(latest.submittedAt) : null;
 

@@ -131,9 +131,42 @@ function combine(
       (a, b) => a.fiscalYear - b.fiscalYear
     );
     if (history.length === 0) continue;
-    out.push({ ...mapCompany(c), latest: history[history.length - 1], history });
+    const latest = computeLatestWithFallback(history);
+    out.push({ ...mapCompany(c), latest, history });
   }
   return out;
+}
+
+// 直近年度のレコードを基準にしつつ、null フィールドは過去年度の最新非NULL値で補完する。
+// 「最新年度に平均年収だけ載っていない」ようなケースでも、ヒーロー指標がブランクにならない。
+function computeLatestWithFallback(
+  historyAsc: FinancialMetric[]
+): FinancialMetric {
+  const latest: FinancialMetric = { ...historyAsc[historyAsc.length - 1] };
+  const FALLBACK_FIELDS: Array<keyof FinancialMetric> = [
+    "averageAnnualSalary",
+    "averageAge",
+    "averageTenureYears",
+    "employeeCount",
+    "femaleManagerRatio",
+    "averageOvertimeHours",
+    "revenue",
+    "operatingIncome",
+    "ordinaryIncome",
+    "netIncome",
+  ];
+  for (const f of FALLBACK_FIELDS) {
+    if (latest[f] === null) {
+      for (let i = historyAsc.length - 2; i >= 0; i--) {
+        const v = historyAsc[i][f];
+        if (v !== null && v !== undefined) {
+          (latest as Record<string, unknown>)[f] = v;
+          break;
+        }
+      }
+    }
+  }
+  return latest;
 }
 
 // Supabase JS の暗黙1000行制限を回避するためページネーションする。
@@ -206,7 +239,11 @@ export const getCompanyByEdinetCode = cache(
     if (mErr) throw mErr;
     const history = (metrics ?? []).map((m) => mapMetric(m as DbMetric));
     if (history.length === 0) return { ...mapCompany(c), latest: emptyMetric(c.id), history: [] };
-    return { ...mapCompany(c), latest: history[history.length - 1], history };
+    return {
+      ...mapCompany(c),
+      latest: computeLatestWithFallback(history),
+      history,
+    };
   }
 );
 

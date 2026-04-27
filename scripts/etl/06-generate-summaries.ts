@@ -4,9 +4,10 @@
  *     companies.summary / summary_generated_at / summary_source_doc_id を更新する。
  *
  * 使い方:
- *   npx tsx scripts/etl/06-generate-summaries.ts             # 未生成の会社のみ
- *   npx tsx scripts/etl/06-generate-summaries.ts --force     # 全件再生成
- *   npx tsx scripts/etl/06-generate-summaries.ts --edinet=E00381  # 1社のみ
+ *   npx tsx scripts/etl/06-generate-summaries.ts                    # 未生成の会社のみ
+ *   npx tsx scripts/etl/06-generate-summaries.ts --force            # 全件再生成
+ *   npx tsx scripts/etl/06-generate-summaries.ts --edinet=E00381    # 1社のみ
+ *   npx tsx scripts/etl/06-generate-summaries.ts --concurrency=7    # 並行ワーカー数（デフォルト1）
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -96,29 +97,49 @@ async function generateSummary(args: {
 【有価証券報告書からの抜粋】
 ${businessText.slice(0, 12000)}`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature: 0.3,
-    }),
-  });
-  if (!res.ok) {
+  const maxAttempts = 5;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature: 0.3,
+      }),
+    });
+    if (res.ok) {
+      const json = (await res.json()) as {
+        choices: { message: { content: string } }[];
+      };
+      return json.choices[0].message.content.trim();
+    }
     const err = await res.text();
-    throw new Error(`OpenAI ${res.status}: ${err.slice(0, 300)}`);
+    if (res.status === 429 && attempt < maxAttempts) {
+      // "Please try again in Xs" / "Xms" を抽出してその時間だけ待機。なければ指数バックオフ。
+      const m = err.match(/try again in ([\d.]+)(ms|s)/i);
+      let waitMs = 2 ** attempt * 1000;
+      if (m) {
+        const v = parseFloat(m[1]);
+        waitMs = m[2] === "s" ? v * 1000 : v;
+      }
+      // 余裕を持たせて 200ms 加算
+      await sleep(waitMs + 200);
+      continue;
+    }
+    if (res.status >= 500 && attempt < maxAttempts) {
+      await sleep(2 ** attempt * 1000);
+      continue;
+    }
+    throw new Error(`OpenAI ${res.status}: ${err.slice(0, 200)}`);
   }
-  const json = (await res.json()) as {
-    choices: { message: { content: string } }[];
-  };
-  return json.choices[0].message.content.trim();
+  throw new Error("OpenAI: max retries exceeded");
 }
 
 async function fetchAndExtractBusinessText(docId: string): Promise<string> {
@@ -147,77 +168,105 @@ async function fetchAndExtractBusinessText(docId: string): Promise<string> {
   return parts.join("\n\n");
 }
 
+async function processOne(
+  c: CompanyRow,
+  index: number,
+  total: number
+): Promise<"ok" | "skip" | "fail"> {
+  const ind = Array.isArray(c.industries)
+    ? c.industries[0]?.name ?? null
+    : c.industries?.name ?? null;
+  const tag = `[${index + 1}/${total}] ${c.edinet_code} ${c.name}`;
+  try {
+    const { data: latest } = await supabaseAdmin
+      .from("financial_metrics")
+      .select("doc_id, fiscal_year")
+      .eq("company_id", c.id)
+      .not("doc_id", "is", null)
+      .order("fiscal_year", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!latest?.doc_id) {
+      console.warn(`${tag} skip: no doc_id`);
+      return "skip";
+    }
+    const docId = (latest as LatestDoc).doc_id;
+    const text = await fetchAndExtractBusinessText(docId);
+    if (text.length < 200) {
+      console.warn(`${tag} skip: text too short (${text.length} chars)`);
+      return "skip";
+    }
+    const summary = await generateSummary({
+      companyName: c.name,
+      industryName: ind,
+      businessText: text,
+    });
+    await supabaseAdmin
+      .from("companies")
+      .update({
+        summary,
+        summary_generated_at: new Date().toISOString(),
+        summary_source_doc_id: docId,
+      })
+      .eq("id", c.id);
+    console.log(`${tag} OK (${summary.length}chars)`);
+    return "ok";
+  } catch (e) {
+    console.error(`${tag} FAIL: ${e}`);
+    return "fail";
+  }
+}
+
 async function main() {
   const force = arg("force") === "true";
   const onlyEdinet = arg("edinet");
+  const concurrency = Math.max(1, Number(arg("concurrency") ?? "1"));
 
-  let q = supabaseAdmin
-    .from("companies")
-    .select("id, edinet_code, name, industry_code, industries(name), summary");
-  if (onlyEdinet) q = q.eq("edinet_code", onlyEdinet);
-  const { data: companies, error } = await q;
-  if (error) throw error;
+  // ページネーションして全件取得（Supabase JS の暗黙1000行制限を回避）
+  const PAGE = 1000;
+  let collected: CompanyRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let q = supabaseAdmin
+      .from("companies")
+      .select("id, edinet_code, name, industry_code, industries(name), summary")
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (onlyEdinet) q = q.eq("edinet_code", onlyEdinet);
+    if (!force) q = q.is("summary", null);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    collected = collected.concat(data as unknown as CompanyRow[]);
+    if (data.length < PAGE) break;
+    if (onlyEdinet) break;
+  }
 
-  const targets = (companies ?? []).filter(
-    (c) => force || !(c as CompanyRow).summary
-  );
-  console.log(`target companies: ${targets.length}`);
+  const targets = collected;
+  console.log(`target companies: ${targets.length}, concurrency: ${concurrency}`);
 
   let ok = 0;
   let fail = 0;
-  for (let i = 0; i < targets.length; i++) {
-    const c = targets[i] as CompanyRow;
-    const ind = Array.isArray(c.industries)
-      ? c.industries[0]?.name ?? null
-      : c.industries?.name ?? null;
-    const tag = `[${i + 1}/${targets.length}] ${c.edinet_code} ${c.name}`;
+  let skip = 0;
+  let cursor = 0;
+  const total = targets.length;
 
-    try {
-      const { data: latest } = await supabaseAdmin
-        .from("financial_metrics")
-        .select("doc_id, fiscal_year")
-        .eq("company_id", c.id)
-        .not("doc_id", "is", null)
-        .order("fiscal_year", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!latest?.doc_id) {
-        console.warn(`${tag} skip: no doc_id`);
-        continue;
-      }
-      const docId = (latest as LatestDoc).doc_id;
-
-      const text = await fetchAndExtractBusinessText(docId);
-      if (text.length < 200) {
-        console.warn(`${tag} skip: text too short (${text.length} chars)`);
-        continue;
-      }
-
-      const summary = await generateSummary({
-        companyName: c.name,
-        industryName: ind,
-        businessText: text,
-      });
-
-      await supabaseAdmin
-        .from("companies")
-        .update({
-          summary,
-          summary_generated_at: new Date().toISOString(),
-          summary_source_doc_id: docId,
-        })
-        .eq("id", c.id);
-
-      ok++;
-      console.log(`${tag} OK (${summary.length}chars)`);
-      await sleep(300); // OpenAI レートリミット保護
-    } catch (e) {
-      fail++;
-      console.error(`${tag} FAIL: ${e}`);
+  // 共有キューから次のインデックスを取り出して順次処理する N 個のワーカー
+  async function worker() {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= total) return;
+      const result = await processOne(targets[idx], idx, total);
+      if (result === "ok") ok++;
+      else if (result === "skip") skip++;
+      else fail++;
+      // OpenAI レートリミット保護: ワーカー単位で軽く間引く
+      await sleep(200);
     }
   }
 
-  console.log(`\ndone: ok=${ok} fail=${fail}`);
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+  console.log(`\ndone: ok=${ok} skip=${skip} fail=${fail}`);
 }
 
 main().catch((e) => {

@@ -11,13 +11,31 @@ async function main() {
     .neq("industry_code", "");
   if (delErr) throw delErr;
 
-  // JSで集計（RPC関数は使わない）
-  const { data: rows, error: selErr } = await supabaseAdmin
-    .from("financial_metrics")
-    .select(
-      "fiscal_year, average_annual_salary, average_tenure_years, employee_count, female_manager_ratio, average_overtime_hours, companies(industry_code)"
-    );
-  if (selErr) throw selErr;
+  // JSで集計。Supabase JS の暗黙1000行制限を回避するためページネーションする。
+  const PAGE = 1000;
+  const rows: Array<{
+    fiscal_year: number;
+    average_annual_salary: number | null;
+    average_tenure_years: number | string | null;
+    employee_count: number | null;
+    female_manager_ratio: number | string | null;
+    average_overtime_hours: number | string | null;
+    companies: { industry_code: string | null } | { industry_code: string | null }[] | null;
+  }> = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error: selErr } = await supabaseAdmin
+      .from("financial_metrics")
+      .select(
+        "fiscal_year, average_annual_salary, average_tenure_years, employee_count, female_manager_ratio, average_overtime_hours, companies(industry_code)"
+      )
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (selErr) throw selErr;
+    if (!data || data.length === 0) break;
+    rows.push(...(data as unknown as typeof rows));
+    if (data.length < PAGE) break;
+  }
+  console.log(`fetched ${rows.length} financial_metrics rows`);
 
   type Bucket = {
     salaries: number[];

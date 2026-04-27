@@ -28,11 +28,11 @@ type DocRecord = {
 };
 
 async function main() {
-  const aprilPath = path.join(DATA_DIR, "april-companies.json");
-  const aprilCompanies: AprilCompany[] = JSON.parse(
-    await fs.readFile(aprilPath, "utf8")
+  const targetPath = path.join(DATA_DIR, "target-companies.json");
+  const targetCompanies: AprilCompany[] = JSON.parse(
+    await fs.readFile(targetPath, "utf8")
   );
-  const targetEcs = new Set(aprilCompanies.map((c) => c.edinetCode));
+  const targetEcs = new Set(targetCompanies.map((c) => c.edinetCode));
   console.log(`target companies: ${targetEcs.size}`);
 
   // 過去5年分。今日(2026-04-26)から遡って5年。

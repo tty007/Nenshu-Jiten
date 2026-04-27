@@ -52,6 +52,15 @@ const config: Config = {
       fontFeatureSettings: {
         numeric: '"tnum"',
       },
+      keyframes: {
+        marquee: {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(-50%)" },
+        },
+      },
+      animation: {
+        marquee: "marquee 80s linear infinite",
+      },
     },
   },
   plugins: [],

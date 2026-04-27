@@ -3,43 +3,20 @@ import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { SearchBox } from "@/components/SearchBox";
 import {
-  getAllCompanies,
   getAllIndustries,
-  searchCompanies,
+  searchCompaniesPaged,
+  type SortKey,
 } from "@/lib/data/companies";
-import type { CompanyWithLatestMetrics } from "@/types";
-
-type SortKey = "salary" | "tenure" | "employees" | "revenue";
 
 const sortOptions: { key: SortKey; label: string }[] = [
   { key: "salary", label: "平均年収順" },
   { key: "tenure", label: "勤続年数順" },
   { key: "employees", label: "従業員数順" },
   { key: "revenue", label: "売上高順" },
+  { key: "recent", label: "新着順" },
 ];
 
-function getSortValue(
-  c: CompanyWithLatestMetrics,
-  key: SortKey
-): number {
-  switch (key) {
-    case "salary":
-      return c.latest.averageAnnualSalary ?? -Infinity;
-    case "tenure":
-      return c.latest.averageTenureYears ?? -Infinity;
-    case "employees":
-      return c.latest.employeeCount ?? -Infinity;
-    case "revenue":
-      return c.latest.revenue ?? -Infinity;
-  }
-}
-
-function sortCompanies(
-  list: CompanyWithLatestMetrics[],
-  key: SortKey
-): CompanyWithLatestMetrics[] {
-  return [...list].sort((a, b) => getSortValue(b, key) - getSortValue(a, key));
-}
+const PAGE_SIZE = 30;
 
 export default async function SearchPage({
   searchParams,
@@ -48,19 +25,25 @@ export default async function SearchPage({
     q?: string;
     industry?: string;
     sort?: string;
+    page?: string;
   }>;
 }) {
   const params = await searchParams;
   const query = params.q?.trim() ?? "";
   const industryFilter = params.industry?.trim() ?? "";
   const sortKey = (params.sort as SortKey | undefined) ?? "salary";
+  const page = Math.max(1, Number(params.page) || 1);
 
-  const industries = await getAllIndustries();
-  let results = query ? await searchCompanies(query) : await getAllCompanies();
-  if (industryFilter) {
-    results = results.filter((c) => c.industryCode === industryFilter);
-  }
-  results = sortCompanies(results, sortKey);
+  const [industries, result] = await Promise.all([
+    getAllIndustries(),
+    searchCompaniesPaged({
+      query,
+      industryCode: industryFilter || undefined,
+      sort: sortKey,
+      page,
+      pageSize: PAGE_SIZE,
+    }),
+  ]);
 
   const headline = query
     ? `「${query}」の検索結果`
@@ -78,7 +61,12 @@ export default async function SearchPage({
               {headline}
             </h1>
             <p className="mt-1 text-sm text-ink-muted">
-              {results.length} 社が見つかりました
+              {result.total.toLocaleString("ja-JP")} 社が見つかりました
+              {result.totalPages > 1 && (
+                <span className="ml-2 text-ink-subtle">
+                  （{page} / {result.totalPages} ページ）
+                </span>
+              )}
             </p>
           </div>
           <SearchBox defaultValue={query} size="sm" />
@@ -92,7 +80,7 @@ export default async function SearchPage({
                   <FilterLink
                     label="すべて"
                     active={!industryFilter}
-                    href={buildHref({ q: query, sort: sortKey })}
+                    href={buildHref({ sort: sortKey })}
                   />
                 </li>
                 {industries.map((ind) => (
@@ -101,7 +89,6 @@ export default async function SearchPage({
                       label={ind.name}
                       active={industryFilter === ind.code}
                       href={buildHref({
-                        q: query,
                         industry: ind.code,
                         sort: sortKey,
                       })}
@@ -131,7 +118,7 @@ export default async function SearchPage({
           </aside>
 
           <div>
-            {results.length === 0 ? (
+            {result.items.length === 0 ? (
               <div className="rounded-xl border border-dashed border-surface-border bg-white p-10 text-center">
                 <p className="text-sm font-medium text-ink">
                   該当する企業が見つかりませんでした
@@ -141,11 +128,24 @@ export default async function SearchPage({
                 </p>
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {results.map((c) => (
-                  <CompanyCard key={c.id} company={c} />
-                ))}
-              </div>
+              <>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {result.items.map((c) => (
+                    <CompanyCard key={c.id} company={c} />
+                  ))}
+                </div>
+                {result.totalPages > 1 && (
+                  <Pagination
+                    page={page}
+                    totalPages={result.totalPages}
+                    baseHref={buildHref({
+                      q: query,
+                      industry: industryFilter,
+                      sort: sortKey,
+                    })}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
@@ -188,6 +188,81 @@ function FilterLink({
         active
           ? "bg-brand-50 font-medium text-brand-600"
           : "text-ink-muted hover:bg-surface-muted hover:text-ink"
+      }`}
+    >
+      {label}
+    </a>
+  );
+}
+
+function Pagination({
+  page,
+  totalPages,
+  baseHref,
+}: {
+  page: number;
+  totalPages: number;
+  baseHref: string;
+}) {
+  const sep = baseHref.includes("?") ? "&" : "?";
+  const link = (p: number) => `${baseHref}${sep}page=${p}`;
+  // 7個程度のウィンドウ表示
+  const window = 2;
+  const start = Math.max(1, page - window);
+  const end = Math.min(totalPages, page + window);
+  const pages: number[] = [];
+  for (let i = start; i <= end; i++) pages.push(i);
+
+  return (
+    <nav className="mt-8 flex items-center justify-center gap-1 text-sm">
+      <PageLink href={page > 1 ? link(page - 1) : null} label="←" />
+      {start > 1 && (
+        <>
+          <PageLink href={link(1)} label="1" />
+          {start > 2 && <span className="px-2 text-ink-subtle">…</span>}
+        </>
+      )}
+      {pages.map((p) => (
+        <PageLink
+          key={p}
+          href={link(p)}
+          label={String(p)}
+          active={p === page}
+        />
+      ))}
+      {end < totalPages && (
+        <>
+          {end < totalPages - 1 && <span className="px-2 text-ink-subtle">…</span>}
+          <PageLink href={link(totalPages)} label={String(totalPages)} />
+        </>
+      )}
+      <PageLink href={page < totalPages ? link(page + 1) : null} label="→" />
+    </nav>
+  );
+}
+
+function PageLink({
+  href,
+  label,
+  active,
+}: {
+  href: string | null;
+  label: string;
+  active?: boolean;
+}) {
+  if (!href)
+    return (
+      <span className="inline-flex h-9 min-w-9 items-center justify-center rounded-md px-3 text-ink-subtle">
+        {label}
+      </span>
+    );
+  return (
+    <a
+      href={href}
+      className={`inline-flex h-9 min-w-9 items-center justify-center rounded-md px-3 transition ${
+        active
+          ? "bg-brand-600 font-semibold text-white"
+          : "text-ink hover:bg-surface-muted"
       }`}
     >
       {label}

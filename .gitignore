@@ -10,5 +10,6 @@ next-env.d.ts
 .DS_Store
 .vercel
 
-# ETL intermediate artifacts (downloaded ZIPs, doc lists)
+# ETL intermediate artifacts (downloaded ZIPs, doc lists, logs)
 scripts/etl/data/
+scripts/etl/logs/

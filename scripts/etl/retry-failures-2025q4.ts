@@ -1,12 +1,6 @@
 /**
- * 03: historical-docs.json の各docを処理する。
- *   1) type=1 ZIP を取得して Supabase Storage (xbrl-documents) に保存
- *   2) type=5 (XBRL_TO_CSV) を取得してパース
- *   3) raw_xbrl_documents を upsert
- *   4) companies / financial_metrics を upsert
- *
- *   引数 --limit N で最初のN件のみ処理（パイロット用）。
- *   引数 --edinet=Exxxxx で特定企業のみ処理。
+ * 失敗したdocsだけを再処理する。failures-2025q4.jsonを読んで、
+ * 既知の理由（foreign issuer / non-XBRL ZIP）以外を再実行。
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -19,8 +13,18 @@ import {
 } from "./lib/xbrl";
 
 const DATA_DIR = path.resolve(process.cwd(), "scripts/etl/data");
+const FAILURES_FILE = path.join(DATA_DIR, "failures-2025q4.json");
+const HISTORICAL_FILE = path.join(DATA_DIR, "historical-docs-2025q4.json");
+const TARGET_FILE = path.join(DATA_DIR, "target-companies-2025q4.json");
 
-type DocRecord = {
+type FailureRecord = {
+  docID: string;
+  edinetCode: string;
+  filerName: string | null;
+  error: string;
+};
+
+type HistoricalDoc = {
   docID: string;
   edinetCode: string;
   filerName: string | null;
@@ -31,79 +35,61 @@ type DocRecord = {
   formCode: string | null;
 };
 
-type AprilCompany = {
+type EnrichedTarget = {
   edinetCode: string;
   industryCode: string | null;
-  filerName: string | null;
-  secCode: string | null;
 };
 
-function arg(name: string): string | undefined {
-  const pref = `--${name}=`;
-  const a = process.argv.find((x) => x.startsWith(pref));
-  if (a) return a.slice(pref.length);
-  if (process.argv.includes(`--${name}`)) return "true";
-  return undefined;
-}
-
 async function main() {
-  const docs: DocRecord[] = JSON.parse(
-    await fs.readFile(path.join(DATA_DIR, "historical-docs.json"), "utf8")
+  const failures: FailureRecord[] = JSON.parse(
+    await fs.readFile(FAILURES_FILE, "utf8")
   );
-  const targetCompanies: AprilCompany[] = JSON.parse(
-    await fs.readFile(path.join(DATA_DIR, "target-companies.json"), "utf8")
+  const histDocs: HistoricalDoc[] = JSON.parse(
+    await fs.readFile(HISTORICAL_FILE, "utf8")
   );
-  const indByEc = new Map(
-    targetCompanies.map((c) => [c.edinetCode, c.industryCode])
+  const targets: EnrichedTarget[] = JSON.parse(
+    await fs.readFile(TARGET_FILE, "utf8")
   );
 
-  const limit = arg("limit") ? Number(arg("limit")) : undefined;
-  const onlyEdinet = arg("edinet");
-  const skipExisting = arg("skip-existing") === "true";
+  // Skip the foreign-issuer ZIP-format failures (not real XBRL)
+  const retryable = failures.filter((f) => !f.error.includes("end of central directory"));
+  console.log(`retryable failures: ${retryable.length} / ${failures.length}`);
 
-  let work = docs;
-  if (onlyEdinet) work = work.filter((d) => d.edinetCode === onlyEdinet);
-  if (skipExisting) {
-    const { data: existing } = await supabaseAdmin
-      .from("raw_xbrl_documents")
-      .select("doc_id")
-      .not("storage_path", "is", null)
-      .not("parsed_at", "is", null);
-    const skipSet = new Set((existing ?? []).map((r) => r.doc_id));
-    const before = work.length;
-    work = work.filter((d) => !skipSet.has(d.docID));
-    console.log(`skip-existing: ${before - work.length} docs already processed, skipping`);
-  }
-  if (limit !== undefined) work = work.slice(0, limit);
+  const docByID = new Map(histDocs.map((d) => [d.docID, d]));
+  const indByEc = new Map(targets.map((t) => [t.edinetCode, t.industryCode]));
 
-  console.log(`processing ${work.length} documents`);
+  const newFailures: FailureRecord[] = [];
 
-  let ok = 0;
-  let fail = 0;
-  for (let i = 0; i < work.length; i++) {
-    const d = work[i];
-    const tag = `[${i + 1}/${work.length}] ${d.docID} (${d.edinetCode})`;
+  for (const f of retryable) {
+    const d = docByID.get(f.docID);
+    if (!d) {
+      console.log(`skip ${f.docID}: not in historical-docs`);
+      continue;
+    }
+    console.log(`\n${d.docID} (${d.edinetCode} ${d.filerName})`);
     try {
-      // 1) ZIP取得 (type=1) and upload
       const zipBuf = await fetchDocBinary(d.docID, 1);
+      console.log(`  zip downloaded: ${zipBuf.length} bytes`);
       const storagePath = `${d.edinetCode}/${d.docID}.zip`;
-      const uploadRes = await supabaseAdmin.storage
+      const upRes = await supabaseAdmin.storage
         .from(STORAGE_BUCKET)
         .upload(storagePath, zipBuf, {
           contentType: "application/zip",
           upsert: true,
         });
-      if (uploadRes.error) throw uploadRes.error;
+      if (upRes.error) {
+        console.log(`  storage error:`, JSON.stringify(upRes.error, null, 2));
+        throw new Error(`storage upload: ${JSON.stringify(upRes.error)}`);
+      }
+      console.log(`  uploaded → ${storagePath}`);
 
-      await sleep(60);
-
-      // 2) CSV取得 (type=5) and parse
       const csvZip = await fetchDocBinary(d.docID, 5);
+      console.log(`  csv zip downloaded: ${csvZip.length} bytes`);
       const facts = await parseXbrlCsvZip(csvZip);
       const meta = extractCompanyMeta(facts);
       const fin = extractFinancialFacts(facts);
+      console.log(`  parsed: fy=${fin.fiscalYear} salary=${fin.averageAnnualSalary}`);
 
-      // 3) upsert raw_xbrl_documents
       const { error: rawErr } = await supabaseAdmin
         .from("raw_xbrl_documents")
         .upsert(
@@ -120,12 +106,12 @@ async function main() {
             filer_name: d.filerName ?? meta.name,
             storage_path: storagePath,
             parsed_at: new Date().toISOString(),
+            parse_error: null,
           },
           { onConflict: "doc_id" }
         );
       if (rawErr) throw rawErr;
 
-      // 4) upsert companies (latest filing wins for metadata)
       const industryCode = indByEc.get(d.edinetCode) ?? null;
       const { data: companyRow, error: cErr } = await supabaseAdmin
         .from("companies")
@@ -144,7 +130,19 @@ async function main() {
         .single();
       if (cErr) throw cErr;
 
-      // 5) upsert financial_metrics
+      // Sanity-check: average_annual_salary column is int (max ~2.1B).
+      // Values > 2B are clearly filing errors (e.g. company entered total payroll
+      // instead of per-person average). Drop the field rather than overflow.
+      const safeSalary =
+        fin.averageAnnualSalary !== null && fin.averageAnnualSalary > 2_000_000_000
+          ? null
+          : fin.averageAnnualSalary;
+      if (safeSalary !== fin.averageAnnualSalary) {
+        console.log(
+          `  WARN: salary ${fin.averageAnnualSalary} exceeds int range — dropped`
+        );
+      }
+
       if (Number.isFinite(fin.fiscalYear)) {
         const { error: fErr } = await supabaseAdmin
           .from("financial_metrics")
@@ -152,7 +150,7 @@ async function main() {
             {
               company_id: companyRow.id,
               fiscal_year: fin.fiscalYear,
-              average_annual_salary: fin.averageAnnualSalary,
+              average_annual_salary: safeSalary,
               average_age: fin.averageAge,
               average_tenure_years: fin.averageTenureYears,
               employee_count: fin.employeeCount,
@@ -169,32 +167,34 @@ async function main() {
           );
         if (fErr) throw fErr;
       }
-
-      ok++;
-      console.log(`${tag} OK fy=${fin.fiscalYear} salary=${fin.averageAnnualSalary} rev=${fin.revenue}`);
+      console.log(`  OK`);
     } catch (e) {
-      fail++;
-      console.error(`${tag} FAIL: ${e}`);
-      // still record the parse error
-      await supabaseAdmin.from("raw_xbrl_documents").upsert(
-        {
-          edinet_code: d.edinetCode,
-          doc_id: d.docID,
-          ordinance_code: d.ordinanceCode,
-          form_code: d.formCode,
-          doc_type_code: "120",
-          period_start: d.periodStart,
-          period_end: d.periodEnd,
-          submitted_at: d.submitDateTime ?? new Date().toISOString(),
-          filer_name: d.filerName,
-          parse_error: String(e),
-        },
-        { onConflict: "doc_id" }
-      );
+      const msg =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e !== null
+            ? JSON.stringify(e)
+            : String(e);
+      console.log(`  FAIL: ${msg}`);
+      newFailures.push({
+        docID: d.docID,
+        edinetCode: d.edinetCode,
+        filerName: d.filerName,
+        error: msg,
+      });
     }
-    await sleep(80);
+    await sleep(100);
   }
-  console.log(`\ndone: ok=${ok} fail=${fail}`);
+
+  console.log(`\n=== retry summary ===`);
+  console.log(`retried: ${retryable.length}`);
+  console.log(`still failing: ${newFailures.length}`);
+  if (newFailures.length > 0) {
+    console.log(`\n=== new failures ===`);
+    for (const f of newFailures) {
+      console.log(`  ${f.docID} (${f.edinetCode} ${f.filerName}): ${f.error}`);
+    }
+  }
 }
 
 main().catch((e) => {

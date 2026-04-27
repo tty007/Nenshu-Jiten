@@ -3,8 +3,9 @@ import { ArrowRight, BarChart3, FileSearch, Search } from "lucide-react";
 import { CompanyCard } from "@/components/CompanyCard";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { MarqueeRow } from "@/components/MarqueeRow";
 import { SearchBox } from "@/components/SearchBox";
-import { getAllCompanies, getAllIndustries } from "@/lib/data/companies";
+import { getAllIndustries, getRecentCompanies } from "@/lib/data/companies";
 
 export const revalidate = 3600;
 
@@ -27,16 +28,10 @@ const steps = [
 ];
 
 export default async function HomePage() {
-  const [companies, industries] = await Promise.all([
-    getAllCompanies(),
+  const [featured, industries] = await Promise.all([
+    getRecentCompanies(30),
     getAllIndustries(),
   ]);
-  const featured = [...companies]
-    .sort(
-      (a, b) =>
-        (b.latest.submittedAt ?? "").localeCompare(a.latest.submittedAt ?? "")
-    )
-    .slice(0, 6);
 
   return (
     <>
@@ -102,10 +97,14 @@ export default async function HomePage() {
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {featured.map((c) => (
-              <CompanyCard key={c.id} company={c} />
-            ))}
+          <div className="mt-6">
+            <MarqueeRow>
+              {featured.map((c) => (
+                <div key={c.id} className="w-80 shrink-0">
+                  <CompanyCard company={c} />
+                </div>
+              ))}
+            </MarqueeRow>
           </div>
         </section>
 

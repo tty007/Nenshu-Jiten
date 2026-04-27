@@ -43,15 +43,31 @@ const tooltipStyles: React.CSSProperties = {
 };
 
 export function SalaryTrendChart(props: Props) {
+  const { companyName, industryName } = props;
   return (
-    <div className="h-72 w-full">
-      <ParentSize>
-        {({ width, height }) =>
-          width > 0 && height > 0 ? (
-            <SalaryTrendChartInner width={width} height={height} {...props} />
-          ) : null
-        }
-      </ParentSize>
+    <div className="w-full">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted">
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="inline-block h-[2px] w-4 bg-brand" />
+          <span className="truncate">{companyName}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-[2px] w-4 border-t-2 border-dashed border-ink-subtle"
+          />
+          <span className="truncate">{industryName}平均</span>
+        </span>
+      </div>
+      <div className="mt-3 h-72 w-full">
+        <ParentSize>
+          {({ width, height }) =>
+            width > 0 && height > 0 ? (
+              <SalaryTrendChartInner width={width} height={height} {...props} />
+            ) : null
+          }
+        </ParentSize>
+      </div>
     </div>
   );
 }
@@ -240,15 +256,6 @@ function SalaryTrendChartInner({
           </div>
         </TooltipWithBounds>
       )}
-      <div className="absolute right-2 top-2 flex items-center gap-3 text-sm text-ink-muted">
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-[2px] w-4 bg-brand" /> {companyName}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-[2px] w-4 border-t-2 border-dashed border-ink-subtle" />
-          {industryName}平均
-        </span>
-      </div>
     </div>
   );
 }

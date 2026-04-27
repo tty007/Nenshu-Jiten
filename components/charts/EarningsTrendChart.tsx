@@ -61,9 +61,8 @@ function formatYenWithUnit(value: number, unit: YenUnit): string {
   return `${value.toLocaleString("ja-JP")}円`;
 }
 
-function unitLabel(unit: YenUnit): string {
-  if (unit === "oku") return "億円";
-  if (unit === "man") return "万円";
+// 軸目盛がすでに「億」「万」のSI接頭辞を含むため、補足のラベルは常に「円」。
+function unitLabel(_unit: YenUnit): string {
   return "円";
 }
 
@@ -107,7 +106,7 @@ export function EarningsTrendChart({ data, brandColor }: Props) {
 
 function Legend({ brandColor }: { brandColor: BrandColor }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 text-base text-ink-muted">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-base text-ink-muted">
       <span className="inline-flex items-center gap-1.5">
         <span
           aria-hidden
@@ -134,6 +133,7 @@ function Legend({ brandColor }: { brandColor: BrandColor }) {
         />
         経常利益（右軸）
       </span>
+      <span className="text-sm text-ink-subtle">単位: 円</span>
     </div>
   );
 }
@@ -359,24 +359,8 @@ function ChartInner({
               dy: 3,
             })}
           />
-          <text
-            x={0}
-            y={-4}
-            fontSize={10}
-            fill="#9CA3AF"
-            textAnchor="end"
-          >
-            ({unitLabel(leftUnit)})
-          </text>
-          <text
-            x={innerWidth}
-            y={-4}
-            fontSize={10}
-            fill="#9CA3AF"
-            textAnchor="start"
-          >
-            ({unitLabel(rightUnit)})
-          </text>
+          {/* 軸単位のラベルは SVG ではなく HTML 側で表示する（モバイルで軸と被る対策）。
+              下記の <text> は意図的に非表示。 */}
           <AxisBottom
             scale={xScale}
             top={innerHeight}

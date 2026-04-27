@@ -10,6 +10,10 @@ on:
         description: "直近N日分を取り込む（デフォルト 3）"
         required: false
         default: "3"
+      concurrency:
+        description: "並行ワーカー数（デフォルト 3、ピーク日は 5 推奨）"
+        required: false
+        default: "3"
       skip_summaries:
         description: "AI 概要生成をスキップする"
         required: false
@@ -24,7 +28,9 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 3月期決算の集中提出日（6月後半）には1日1000社以上が来るため、長めに確保。
+    # GitHub Actions の上限は 360 分(6h)。
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +53,9 @@ jobs:
           ARGS=""
           if [ -n "${{ inputs.days }}" ]; then
             ARGS="--days=${{ inputs.days }}"
+          fi
+          if [ -n "${{ inputs.concurrency }}" ]; then
+            ARGS="$ARGS --concurrency=${{ inputs.concurrency }}"
           fi
           if [ "${{ inputs.skip_summaries }}" = "true" ]; then
             ARGS="$ARGS --skip-summaries"

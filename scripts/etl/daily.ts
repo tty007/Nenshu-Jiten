@@ -3,10 +3,11 @@
  * 業界平均を再集計し、新規会社の AI 概要を生成する。
  *
  * 使い方:
- *   npx tsx scripts/etl/daily.ts                 # デフォルト 3日分
- *   npx tsx scripts/etl/daily.ts --days=7        # 直近7日分
+ *   npx tsx scripts/etl/daily.ts                       # デフォルト 3日分
+ *   npx tsx scripts/etl/daily.ts --days=7              # 直近7日分
  *   npx tsx scripts/etl/daily.ts --start=2026-04-25 --end=2026-04-26
- *   npx tsx scripts/etl/daily.ts --skip-summaries   # 概要生成をスキップ
+ *   npx tsx scripts/etl/daily.ts --concurrency=5       # 並行ワーカー数（デフォルト 3）
+ *   npx tsx scripts/etl/daily.ts --skip-summaries      # 概要生成をスキップ
  *
  * GitHub Actions から毎日叩かれる前提（環境変数は secrets で注入）。
  */
@@ -300,22 +301,29 @@ async function main() {
   }
   const indNameToCode = await loadIndustryNameToCode();
 
-  // 4. 各 doc を取り込み
+  // 4. 各 doc を取り込み（並行ワーカー）
+  const concurrency = Math.max(1, Number(arg("concurrency") ?? "3"));
+  console.log(`[daily] 取り込み開始 concurrency=${concurrency}`);
   let ok = 0;
   let fail = 0;
-  for (let i = 0; i < newDocs.length; i++) {
-    const d = newDocs[i];
-    const ec = d.edinetCode!;
-    const m = edinetMaster.get(ec);
-    const industryCode = m ? indNameToCode.get(m.industryName) ?? null : null;
-    const corporateNumber = m?.corporateNumber || null;
-    process.stdout.write(`[${i + 1}/${newDocs.length}] ${d.docID} (${ec})…`);
-    const r = await processOneDoc(d, industryCode, corporateNumber);
-    if (r === "ok") ok++;
-    else fail++;
-    process.stdout.write(` ${r}\n`);
-    await sleep(80);
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= newDocs.length) return;
+      const d = newDocs[idx];
+      const ec = d.edinetCode!;
+      const m = edinetMaster.get(ec);
+      const industryCode = m ? indNameToCode.get(m.industryName) ?? null : null;
+      const corporateNumber = m?.corporateNumber || null;
+      const r = await processOneDoc(d, industryCode, corporateNumber);
+      if (r === "ok") ok++;
+      else fail++;
+      console.log(`  [${idx + 1}/${newDocs.length}] ${d.docID} (${ec}) ${r}`);
+      await sleep(80);
+    }
   }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
   console.log(`[daily] 取り込み完了 ok=${ok} fail=${fail}`);
 
   // 5. companies.latest_* を再計算

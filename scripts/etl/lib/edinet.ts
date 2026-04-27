@@ -21,9 +21,39 @@ type DocListResponse = {
   results?: EdinetDoc[];
 };
 
+async function fetchWithRetry(
+  url: string,
+  context: string,
+  maxAttempts = 4
+): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url);
+      // 一時的なエラーはリトライ
+      if (res.status === 429 || res.status >= 500) {
+        const wait = 1000 * 2 ** (attempt - 1); // 1s, 2s, 4s, 8s
+        if (attempt < maxAttempts) {
+          await sleep(wait);
+          continue;
+        }
+        throw new Error(`${context}: HTTP ${res.status} after ${attempt} attempts`);
+      }
+      return res;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < maxAttempts) {
+        await sleep(1000 * 2 ** (attempt - 1));
+        continue;
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(`${context}: ${String(lastErr)}`);
+}
+
 export async function fetchDocList(date: string): Promise<EdinetDoc[]> {
   const url = `${BASE}/documents.json?date=${date}&type=2&Subscription-Key=${env.EDINET_API_KEY}`;
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url, `EDINET docList ${date}`);
   if (!res.ok) throw new Error(`EDINET docList ${date}: HTTP ${res.status}`);
   const json = (await res.json()) as DocListResponse;
   return json.results ?? [];
@@ -34,7 +64,7 @@ export async function fetchDocBinary(
   type: 1 | 5
 ): Promise<Buffer> {
   const url = `${BASE}/documents/${docID}?type=${type}&Subscription-Key=${env.EDINET_API_KEY}`;
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url, `EDINET doc ${docID} type=${type}`);
   if (!res.ok) throw new Error(`EDINET doc ${docID} type=${type}: HTTP ${res.status}`);
   const ab = await res.arrayBuffer();
   return Buffer.from(ab);

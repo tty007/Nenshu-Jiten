@@ -20,13 +20,6 @@ export type ActionResult =
   | { ok: true; message?: string; redirectTo?: string }
   | { ok: false; error: string; fieldErrors?: Record<string, string[]> };
 
-function siteOrigin(): string {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit.replace(/\/$/, "");
-  // middleware が動いている場合は host ヘッダから推測（ローカル/プレビュー対応）
-  return "";
-}
-
 async function originFromHeaders(): Promise<string> {
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? "http";
@@ -34,8 +27,13 @@ async function originFromHeaders(): Promise<string> {
   return `${proto}://${host}`;
 }
 
+/**
+ * 認証メールやOAuthの戻り先URLは、ユーザーが今いる origin を使う。
+ * NEXT_PUBLIC_SITE_URL は sitemap/SEO用途のみで、auth ランタイムでは
+ * 参照しない（ローカルで signup → 本番URLに誘導される 404 を防ぐ）。
+ */
 async function getSiteUrl(): Promise<string> {
-  return siteOrigin() || (await originFromHeaders());
+  return await originFromHeaders();
 }
 
 // ----- Sign up (email + password) -----

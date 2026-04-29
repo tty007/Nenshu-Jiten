@@ -67,15 +67,6 @@ export default async function MypagePage() {
           </form>
         </div>
       </div>
-
-      <div className="rounded-2xl border border-dashed border-surface-border bg-surface-muted/40 p-6 sm:p-8">
-        <h2 className="text-base font-semibold text-ink">これから実装予定</h2>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-ink-muted">
-          <li>気になる企業のブックマーク機能</li>
-          <li>業界の更新ウォッチ・通知</li>
-          <li>口コミ／レビュー投稿（任意）</li>
-        </ul>
-      </div>
     </section>
   );
 }

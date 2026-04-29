@@ -4,7 +4,7 @@ export function Footer() {
   return (
     <footer className="border-t border-surface-border bg-surface-muted">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="grid gap-8 sm:grid-cols-3">
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <p className="text-base font-semibold text-ink">年収辞典</p>
             <p className="mt-2 text-sm text-ink-muted">
@@ -29,6 +29,21 @@ export function Footer() {
               <li>
                 <Link href="/industries" className="hover:text-ink">
                   業界一覧
+                </Link>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-ink">規約</p>
+            <ul className="mt-2 space-y-1 text-sm text-ink-muted">
+              <li>
+                <Link href="/terms-of-service" className="hover:text-ink">
+                  利用規約
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy-policy" className="hover:text-ink">
+                  プライバシーポリシー
                 </Link>
               </li>
             </ul>

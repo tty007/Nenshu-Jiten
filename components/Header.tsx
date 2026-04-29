@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SearchBox } from "@/components/SearchBox";
+import { UserMenu } from "@/components/auth/UserMenu";
 
 export function Header({ showSearch = true }: { showSearch?: boolean }) {
   return (
@@ -30,6 +31,7 @@ export function Header({ showSearch = true }: { showSearch?: boolean }) {
           <Link href="/data-source" className="hover:text-ink">
             データ出典
           </Link>
+          <UserMenu />
         </nav>
       </div>
     </header>

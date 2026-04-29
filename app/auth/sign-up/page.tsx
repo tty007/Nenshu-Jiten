@@ -33,8 +33,18 @@ export default async function SignUpPage() {
       <SignUpForm />
       <p className="mt-6 text-sm text-ink-subtle">
         登録すると{" "}
-        <Link href="/about" className="text-brand hover:text-brand-700">
-          サービス利用について
+        <Link
+          href="/terms-of-service"
+          className="text-brand hover:text-brand-700"
+        >
+          利用規約
+        </Link>
+        {" "}および{" "}
+        <Link
+          href="/privacy-policy"
+          className="text-brand hover:text-brand-700"
+        >
+          プライバシーポリシー
         </Link>
         に同意したことになります。
       </p>

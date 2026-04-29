@@ -16,7 +16,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://example.com"),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+  ),
   title: {
     default: "年収辞典 | 有価証券報告書から見る企業のリアルな数字",
     template: "%s | 年収辞典",

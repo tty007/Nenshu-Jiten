@@ -220,6 +220,32 @@ export const getAllCompanies = cache(async (): Promise<CompanyWithLatestMetrics[
   return combine(companies, metrics);
 });
 
+// サイトマップ用：edinet_code と最終更新日時だけを軽量に全件取得する。
+export const getCompanyIndexForSitemap = cache(
+  async (): Promise<
+    Array<{ edinetCode: string; lastModified: Date | null }>
+  > => {
+    const sb = client();
+    type Row = { edinet_code: string; latest_submitted_at: string | null };
+    const rows = await fetchAllPaginated<Row>((from, to) =>
+      sb
+        .from("companies")
+        .select("edinet_code, latest_submitted_at")
+        .order("edinet_code")
+        .range(from, to) as unknown as PromiseLike<{
+        data: Row[] | null;
+        error: { message: string } | null;
+      }>
+    );
+    return rows.map((r) => ({
+      edinetCode: r.edinet_code,
+      lastModified: r.latest_submitted_at
+        ? new Date(r.latest_submitted_at)
+        : null,
+    }));
+  }
+);
+
 export const getCompanyByEdinetCode = cache(
   async (edinetCode: string): Promise<CompanyWithLatestMetrics | null> => {
     const sb = client();

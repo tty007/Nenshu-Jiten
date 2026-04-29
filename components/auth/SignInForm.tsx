@@ -10,7 +10,13 @@ import {
   TextInput,
 } from "./AuthFormFields";
 
-export function SignInForm({ next }: { next?: string }) {
+export function SignInForm({
+  next,
+  defaultEmail,
+}: {
+  next?: string;
+  defaultEmail?: string;
+}) {
   const [state, formAction] = useActionState<ActionResult | null, FormData>(
     signInWithEmail,
     null
@@ -30,6 +36,7 @@ export function SignInForm({ next }: { next?: string }) {
           type="email"
           required
           autoComplete="email"
+          defaultValue={defaultEmail}
         />
       </FieldRow>
       <FieldRow

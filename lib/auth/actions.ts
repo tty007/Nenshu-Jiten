@@ -55,7 +55,7 @@ export async function signUpWithEmail(
   }
   const sb = await createSupabaseServerClient();
   const site = await getSiteUrl();
-  const { error } = await sb.auth.signUp({
+  const { data, error } = await sb.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
@@ -67,6 +67,13 @@ export async function signUpWithEmail(
   });
   if (error) {
     return { ok: false, error: humanizeAuthError(error.message) };
+  }
+  // Supabase は列挙攻撃対策で「既存メールでの再登録」も成功扱いにする。
+  // ただし data.user.identities が空配列で返るので、それで検出してログイン誘導。
+  if (data.user && (data.user.identities?.length ?? 0) === 0) {
+    redirect(
+      `/auth/sign-in?email=${encodeURIComponent(parsed.data.email)}&error=email_exists`
+    );
   }
   redirect("/auth/verify-email");
 }

@@ -24,7 +24,7 @@ export function Header({ showSearch = true }: { showSearch?: boolean }) {
             <SearchBox size="sm" />
           </div>
         )}
-        <nav className="ml-auto flex items-center gap-4 text-sm text-ink-muted sm:ml-0">
+        <nav className="ml-auto flex items-center gap-6 text-sm text-ink-muted">
           <Link href="/industries" className="hover:text-ink">
             業界一覧
           </Link>

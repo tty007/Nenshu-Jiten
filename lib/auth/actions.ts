@@ -60,7 +60,9 @@ export async function signUpWithEmail(
     password: parsed.data.password,
     options: {
       data: { display_name: parsed.data.displayName },
-      emailRedirectTo: `${site}/auth/callback?next=/mypage`,
+      // PKCE フローの確認URL: <site>/auth/confirm?token_hash=...&next=<emailRedirectTo>
+      // verifyOtp 後にそのまま /mypage へ。/auth/callback 経由は OAuth 用なので使わない。
+      emailRedirectTo: `${site}/mypage`,
     },
   });
   if (error) {

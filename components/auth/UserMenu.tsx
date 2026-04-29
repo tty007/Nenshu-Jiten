@@ -11,20 +11,12 @@ export async function UserMenu() {
 
   if (!user) {
     return (
-      <div className="flex items-center gap-2">
-        <Link
-          href="/auth/sign-in"
-          className="hidden rounded-md px-3 py-1.5 text-sm font-medium text-ink-muted hover:text-ink sm:inline-flex"
-        >
-          ログイン
-        </Link>
-        <Link
-          href="/auth/sign-up"
-          className="inline-flex items-center rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
-        >
-          会員登録
-        </Link>
-      </div>
+      <Link
+        href="/auth/sign-in"
+        className="inline-flex items-center rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+      >
+        ログイン
+      </Link>
     );
   }
 

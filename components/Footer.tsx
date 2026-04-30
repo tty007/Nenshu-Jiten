@@ -66,7 +66,7 @@ export function Footer() {
           </div>
         </div>
         <p className="mt-10 border-t border-surface-border pt-6 text-base text-ink-subtle">
-          © {new Date().getFullYear()} 年収辞典. このサイトは個人運営のプロトタイプです。
+          © {new Date().getFullYear()} 年収辞典.
         </p>
       </div>
     </footer>

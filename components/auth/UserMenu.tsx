@@ -27,12 +27,12 @@ export async function UserMenu() {
     <div className="flex items-center gap-1.5">
       <Link
         href="/mypage"
-        className="group inline-flex items-center gap-2 rounded-full border border-surface-border bg-white py-1 pl-1 pr-3 text-sm text-ink hover:border-brand-100 hover:bg-brand-50/40"
+        className="group inline-flex items-center gap-2 rounded-full border-surface-border bg-white text-sm text-ink hover:border-brand-100 hover:bg-brand-50/40 sm:border sm:py-1 sm:pl-1 sm:pr-3"
         title={`マイページ (${label})`}
       >
         <span
           aria-hidden
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white sm:h-7 sm:w-7"
         >
           {initial}
         </span>
@@ -40,7 +40,7 @@ export async function UserMenu() {
           {label}
         </span>
       </Link>
-      <form action={signOut}>
+      <form action={signOut} className="hidden sm:block">
         <button
           type="submit"
           aria-label="ログアウト"

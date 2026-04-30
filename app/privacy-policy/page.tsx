@@ -8,7 +8,7 @@ export const metadata = {
     "年収辞典における利用者の個人情報の取得・利用・管理についての方針を定めたプライバシーポリシーです。",
 };
 
-const EFFECTIVE_DATE = "2026年4月29日";
+const EFFECTIVE_DATE = "2026年4月30日";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -36,7 +36,7 @@ export default function PrivacyPolicyPage() {
           </h3>
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-muted">
             <li>メールアドレス</li>
-            <li>表示名</li>
+            <li>ニックネーム（本名以外の任意の表示名）</li>
             <li>パスワード（不可逆な形式でハッシュ化して保管）</li>
           </ul>
           <h3 className="pt-2 text-sm font-semibold text-ink">
@@ -44,12 +44,25 @@ export default function PrivacyPolicyPage() {
           </h3>
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-muted">
             <li>Google アカウントのメールアドレス</li>
-            <li>
-              プロフィール情報（氏名、プロフィール画像URL等のうち Google から提供される範囲）
-            </li>
           </ul>
+          <p className="pl-1 text-xs text-ink-muted">
+            Google から提供される氏名・プロフィール画像等は本サービスでは保存しません。サイト内の表示には別途設定したニックネームを使用します。
+          </p>
           <h3 className="pt-2 text-sm font-semibold text-ink">
-            (3) サービス利用に伴って自動的に取得される情報
+            (3) 利用者がマイページで任意に登録できる属性情報
+          </h3>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-ink-muted">
+            <li>生まれ年（年単位のみ。誕生日は収集しません）</li>
+            <li>性別（男性／女性／その他／回答しない の自己申告）</li>
+            <li>都道府県（市区町村以下は収集しません）</li>
+            <li>キャリアステータス（学生／社会人）</li>
+            <li>年収レンジ（所定の段階から選択）</li>
+          </ul>
+          <p className="pl-1 text-xs text-ink-muted">
+            上記 (3) はすべて<strong className="font-semibold">任意</strong>であり、未入力でも本サービスを利用できます。
+          </p>
+          <h3 className="pt-2 text-sm font-semibold text-ink">
+            (4) サービス利用に伴って自動的に取得される情報
           </h3>
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-muted">
             <li>アクセスログ（IPアドレス、ユーザーエージェント、参照元URL、アクセス日時）</li>

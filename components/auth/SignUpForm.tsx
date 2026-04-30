@@ -19,10 +19,10 @@ export function SignUpForm() {
   return (
     <form action={formAction} className="space-y-4">
       <FieldRow
-        label="表示名"
+        label="ニックネーム"
         htmlFor="displayName"
         errors={fieldErrors.displayName}
-        hint="マイページや投稿で使われる名前。後から変更できます。"
+        hint="本名は使用しないでください。サイト内（口コミ等）で公開されます。30文字以内"
       >
         <TextInput
           id="displayName"
@@ -30,7 +30,7 @@ export function SignUpForm() {
           type="text"
           required
           autoComplete="nickname"
-          maxLength={50}
+          maxLength={30}
         />
       </FieldRow>
       <FieldRow

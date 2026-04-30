@@ -1,17 +1,18 @@
 import { DeleteAccountForm } from "@/components/auth/DeleteAccountForm";
-import { UpdateDisplayNameForm } from "@/components/auth/UpdateDisplayNameForm";
 import { UpdateEmailForm } from "@/components/auth/UpdateEmailForm";
 import { UpdatePasswordForm } from "@/components/auth/UpdatePasswordForm";
-import { getCurrentProfile, getCurrentUser } from "@/lib/auth/get-user";
+import { UserProfileForm } from "@/components/profile/UserProfileForm";
+import { getCurrentUser } from "@/lib/auth/get-user";
+import { getMyUserProfile } from "@/lib/profile/get-user-profile";
 
 export const metadata = {
   title: "アカウント設定",
 };
 
 export default async function SettingsPage() {
-  const [user, profile] = await Promise.all([
+  const [user, userProfile] = await Promise.all([
     getCurrentUser(),
-    getCurrentProfile(),
+    getMyUserProfile(),
   ]);
   if (!user) return null;
   return (
@@ -21,12 +22,15 @@ export default async function SettingsPage() {
           アカウント設定
         </h1>
         <p className="mt-1 text-sm text-ink-muted">
-          表示名・メールアドレス・パスワードの変更や、退会ができます。
+          プロフィール・メールアドレス・パスワードの変更や、退会ができます。
         </p>
       </div>
 
-      <SettingCard title="表示名">
-        <UpdateDisplayNameForm defaultValue={profile?.displayName ?? ""} />
+      <SettingCard
+        title="プロフィール"
+        description="ニックネームと属性情報。すべて任意です。"
+      >
+        <UserProfileForm initial={userProfile} />
       </SettingCard>
 
       <SettingCard title="メールアドレス">
@@ -46,10 +50,12 @@ export default async function SettingsPage() {
 
 function SettingCard({
   title,
+  description,
   danger,
   children,
 }: {
   title: string;
+  description?: string;
   danger?: boolean;
   children: React.ReactNode;
 }) {
@@ -66,6 +72,9 @@ function SettingCard({
       >
         {title}
       </h2>
+      {description && (
+        <p className="mt-1 text-sm text-ink-muted">{description}</p>
+      )}
       <div className="mt-4">{children}</div>
     </div>
   );

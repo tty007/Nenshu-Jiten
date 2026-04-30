@@ -8,8 +8,8 @@ const password = z
 const displayName = z
   .string()
   .trim()
-  .min(1, "表示名を入力してください")
-  .max(50, "表示名は50文字以内で入力してください");
+  .min(1, "ニックネームを入力してください")
+  .max(30, "ニックネームは30文字以内で入力してください");
 
 export const signUpSchema = z.object({
   email,
@@ -52,6 +52,3 @@ export type UpdatePasswordInput = z.infer<typeof updatePasswordSchema>;
 
 export const updateEmailSchema = z.object({ email });
 export type UpdateEmailInput = z.infer<typeof updateEmailSchema>;
-
-export const updateDisplayNameSchema = z.object({ displayName });
-export type UpdateDisplayNameInput = z.infer<typeof updateDisplayNameSchema>;

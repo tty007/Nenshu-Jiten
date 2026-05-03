@@ -242,14 +242,14 @@ export default async function HomePage() {
         </section>
 
         {/* Salary distribution */}
-        <section className="mx-auto max-w-7xl px-6 py-14 sm:px-8 lg:px-8">
+        <section className="mx-auto max-w-7xl px-6 py-20 sm:px-8 sm:py-24 lg:px-8">
           <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
             平均年収の分布
           </h2>
           <p className="mt-1 text-sm text-ink-muted">
-            上場企業全社の平均年収を 100 万円刻みで集計
+            有価証券報告書を提出している企業ベースで集計
           </p>
-          <div className="mt-6 pr-2 sm:pr-4">
+          <div className="mt-8 pr-2 sm:pr-4">
             <SalaryDistributionChart
               buckets={salaryDist.buckets}
               averageYen={salaryDist.averageYen}
@@ -327,7 +327,7 @@ export default async function HomePage() {
           <p className="mt-1 text-sm text-ink-muted">
             業界平均と比較しながら企業を見ていきましょう
           </p>
-          <ul className="mt-6 divide-y divide-surface-border border-y border-surface-border sm:grid sm:grid-cols-2 sm:gap-x-8 sm:divide-y-0 sm:border-0 lg:grid-cols-3">
+          <ul className="mt-6 divide-y divide-surface-border border-t border-surface-border sm:grid sm:grid-cols-2 sm:gap-x-8 sm:divide-y-0 sm:border-0 lg:grid-cols-3">
             {industries.map((ind) => (
               <li
                 key={ind.code}

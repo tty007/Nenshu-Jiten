@@ -35,7 +35,7 @@ export function HomeRankingTabs({
   const items = data[active];
   return (
     <>
-      <div className="mt-5 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+      <div className="mt-5 -mx-4 overflow-x-auto px-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none] sm:mx-0 sm:px-0">
         <div className="flex min-w-max gap-2 sm:gap-1">
           {TABS.map((t) => (
             <button

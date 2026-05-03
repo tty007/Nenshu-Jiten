@@ -13,7 +13,7 @@ export async function UserMenu() {
     return (
       <Link
         href="/auth/sign-in"
-        className="inline-flex items-center rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+        className="inline-flex items-center rounded-md bg-gradient-to-r from-blue-700 to-sky-400 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:from-blue-800 hover:to-sky-500"
       >
         ログイン
       </Link>

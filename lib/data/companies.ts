@@ -341,8 +341,9 @@ export async function searchCompaniesPaged(
     const or = [
       `name.ilike.%${safe}%`,
       `name_kana.ilike.%${safe}%`,
-      `securities_code.ilike.%${safe}%`,
-      `edinet_code.ilike.%${safe}%`,
+      // コード類は前方一致（"7777" が EDINET "E37777" 等にマッチするノイズを防ぐ）
+      `securities_code.ilike.${safe}%`,
+      `edinet_code.ilike.${safe}%`,
     ].join(",");
     q = q.or(or);
   }
@@ -416,8 +417,9 @@ export async function searchCompanies(
   const orFilter = [
     `name.ilike.%${q}%`,
     `name_kana.ilike.%${q}%`,
-    `securities_code.ilike.%${q}%`,
-    `edinet_code.ilike.%${q}%`,
+    // コード類は前方一致でノイズを排除
+    `securities_code.ilike.${q}%`,
+    `edinet_code.ilike.${q}%`,
   ].join(",");
   const companies = await fetchAllPaginated<DbCompany>((from, to) =>
     sb

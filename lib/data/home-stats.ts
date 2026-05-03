@@ -65,6 +65,30 @@ export const getHomeStats = cache(async (): Promise<HomeStats> => {
   };
 });
 
+export const getIndustryCompanyCounts = cache(
+  async (): Promise<Record<string, number>> => {
+    const sb = client();
+    const counts: Record<string, number> = {};
+    const pageSize = 1000;
+    let from = 0;
+    for (;;) {
+      const { data, error } = await sb
+        .from("companies")
+        .select("industry_code")
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      const rows = (data ?? []) as { industry_code: string | null }[];
+      for (const r of rows) {
+        if (!r.industry_code) continue;
+        counts[r.industry_code] = (counts[r.industry_code] ?? 0) + 1;
+      }
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+    return counts;
+  }
+);
+
 export const getSalaryDistribution = cache(
   async (): Promise<SalaryDistribution> => {
     const sb = client();

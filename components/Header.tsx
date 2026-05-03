@@ -17,11 +17,11 @@ export function Header({ showSearch = true }: { showSearch?: boolean }) {
           </div>
         )}
         <nav className="ml-auto flex items-center gap-6 text-sm text-ink-muted">
+          <Link href="/search?sort=salary" className="hover:text-ink">
+            ランキング
+          </Link>
           <Link href="/industries" className="hover:text-ink">
             業界一覧
-          </Link>
-          <Link href="/data-source" className="hover:text-ink">
-            データ出典
           </Link>
           <UserMenu />
         </nav>

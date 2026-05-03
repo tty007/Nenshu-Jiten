@@ -264,7 +264,7 @@ function SearchUnlockCta({
         <Lock className="h-5 w-5" aria-hidden />
       </div>
       <h3 className="mt-3 text-base font-semibold text-ink">
-        ランキングはメンバー限定です
+        ランキングは会員限定です
       </h3>
       {reason === "unauth" ? (
         <>

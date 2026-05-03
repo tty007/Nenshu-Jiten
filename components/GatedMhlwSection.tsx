@@ -163,7 +163,7 @@ function UnlockCta({
         <Lock className="h-4 w-4" aria-hidden />
       </div>
       <h3 className="mt-3 text-sm font-semibold text-ink sm:text-base">
-        女性活躍・両立支援データはメンバー限定です
+        女性活躍・両立支援データは会員限定です
       </h3>
       {lockReason === "unauth" ? (
         <>

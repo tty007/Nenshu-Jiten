@@ -214,7 +214,7 @@ function UnlockCta({
         <Lock className="h-4 w-4" aria-hidden />
       </div>
       <h3 className="mt-3 text-sm font-semibold text-ink sm:text-base">
-        役職別年収情報はメンバー限定です
+        役職別年収情報は会員限定です
       </h3>
       {lockReason === "unauth" ? (
         <>

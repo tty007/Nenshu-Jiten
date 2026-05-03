@@ -374,7 +374,11 @@ export default async function CompanyDetailPage({
             <p className="mt-2 text-sm text-ink-muted">
               このページのデータは、{company.name}が
               {submittedDate
-                ? `${submittedDate.getFullYear()}年${submittedDate.getMonth() + 1}月に`
+                ? new Intl.DateTimeFormat("ja-JP", {
+                    timeZone: "Asia/Tokyo",
+                    year: "numeric",
+                    month: "long",
+                  }).format(submittedDate) + "に"
                 : ""}
               金融庁EDINETへ提出した
               {latest.fiscalYear}年度の有価証券報告書（書類管理番号: {latest.docId}）から取得しています。

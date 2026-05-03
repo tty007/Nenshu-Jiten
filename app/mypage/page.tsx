@@ -20,7 +20,9 @@ export default async function MypagePage() {
   ]);
   if (!user) return null;
   const createdAt = profile?.createdAt
-    ? new Date(profile.createdAt).toLocaleDateString("ja-JP")
+    ? new Date(profile.createdAt).toLocaleDateString("ja-JP", {
+        timeZone: "Asia/Tokyo",
+      })
     : "-";
   const nickname = profile?.nickname;
   const greetingName = nickname ?? user.email ?? "ゲスト";

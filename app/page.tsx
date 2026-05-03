@@ -134,17 +134,20 @@ export default async function HomePage() {
               className="object-contain object-right-top"
             />
           </div>
-          <div className="relative mx-auto grid max-w-7xl gap-10 px-6 py-14 sm:px-8 sm:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-12 lg:px-8">
+          <div className="relative mx-auto grid max-w-7xl gap-10 px-6 py-20 sm:px-8 sm:py-24 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-12 lg:px-8">
             <div>
               <h1 className="text-3xl font-bold leading-tight tracking-tight sm:text-5xl sm:leading-tight">
-                <span className="bg-gradient-to-r from-blue-700 to-sky-400 bg-clip-text text-transparent">
-                  有価証券報告書
+                <span className="block">
+                  <span className="bg-gradient-to-r from-blue-700 to-sky-400 bg-clip-text text-transparent">
+                    有価証券報告書
+                  </span>
+                  から見る、
                 </span>
-                から見る、
-                <br className="hidden sm:block" />
-                企業のリアルな数字。
+                <span className="mt-3 block sm:mt-2">
+                  企業のリアルな数字。
+                </span>
               </h1>
-              <ul className="mt-6 space-y-2 text-sm text-ink sm:text-base">
+              <ul className="mt-8 space-y-2 text-sm text-ink sm:mt-6 sm:text-base">
                 {heroBullets.map((b) => (
                   <li key={b} className="flex items-start gap-2">
                     <span
@@ -495,9 +498,17 @@ function SalaryDistributionChart({
   );
 }
 
+// JST (Asia/Tokyo) で yyyy年M月d日 を出す。Vercel が UTC で動く影響で
+// ローカル (JST) と本番 (UTC) で日付がずれる問題を防ぐ。
+const JST_FORMATTER = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
 function formatDate(iso: string | null): string {
   if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  return JST_FORMATTER.format(d);
 }

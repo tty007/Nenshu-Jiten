@@ -14,7 +14,7 @@ import {
   useTooltip,
 } from "@visx/tooltip";
 import { extent } from "d3-array";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { formatSalary } from "@/lib/utils";
 
 export type SalaryTrendDatum = {
@@ -111,7 +111,10 @@ function SalaryTrendChartInner({
     hideTooltip,
   } = useTooltip<SalaryTrendDatum>();
 
-  function handlePointer(event: React.PointerEvent<SVGRectElement>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isTouchRef = useRef(false);
+
+  function updateTooltipFromEvent(event: React.PointerEvent<SVGRectElement>) {
     const point = localPoint(event);
     if (!point) return;
     const x = point.x - margin.left;
@@ -132,8 +135,30 @@ function SalaryTrendChartInner({
     });
   }
 
+  function handlePointerDown(event: React.PointerEvent<SVGRectElement>) {
+    isTouchRef.current = event.pointerType === "touch";
+    updateTooltipFromEvent(event);
+  }
+
+  function handlePointerLeave() {
+    if (!isTouchRef.current) hideTooltip();
+  }
+
+  useEffect(() => {
+    if (!tooltipOpen || !isTouchRef.current) return;
+    function handleOutside(e: PointerEvent) {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) {
+        hideTooltip();
+        isTouchRef.current = false;
+      }
+    }
+    document.addEventListener("pointerdown", handleOutside);
+    return () => document.removeEventListener("pointerdown", handleOutside);
+  }, [tooltipOpen, hideTooltip]);
+
   return (
-    <div className="relative h-full w-full">
+    <div ref={containerRef} className="relative h-full w-full">
       <svg
         width={width}
         height={height}
@@ -208,8 +233,9 @@ function SalaryTrendChartInner({
             width={innerWidth}
             height={innerHeight}
             fill="transparent"
-            onPointerMove={handlePointer}
-            onPointerLeave={hideTooltip}
+            onPointerDown={handlePointerDown}
+            onPointerMove={updateTooltipFromEvent}
+            onPointerLeave={handlePointerLeave}
           />
           {tooltipOpen && tooltipData && (
             <line

@@ -7,7 +7,7 @@ import { CompanyHero } from "@/components/CompanyHero";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { MetricCard } from "@/components/MetricCard";
-import { MhlwSection } from "@/components/MhlwSection";
+import { GatedMhlwSection } from "@/components/GatedMhlwSection";
 import { GatedPositionSalary } from "@/components/GatedPositionSalary";
 import { EarningsTrendChart } from "@/components/charts/EarningsTrendChart";
 import { SalaryTrendChart } from "@/components/charts/SalaryTrendChart";
@@ -20,7 +20,7 @@ import {
   getIndustryAverage,
   getIndustryAverageHistory,
 } from "@/lib/data/industry-averages";
-import { getMhlwForCompany } from "@/lib/data/mhlw";
+import { hasMhlwForCompany } from "@/lib/data/mhlw";
 import {
   diffPercent,
   formatDiff,
@@ -71,7 +71,9 @@ export default async function CompanyDetailPage({
     ? await getCompaniesByIndustry(company.industryCode, company.id, 5)
     : [];
 
-  const mhlw = await getMhlwForCompany(company.id);
+  // 女性活躍・両立支援データは存在判定だけここで行い、実値はゲート API 経由で
+  // 認証ユーザーにのみ返す（HTML には数値を出さない）。
+  const mhlwAvailable = await hasMhlwForCompany(company.id);
   // 役職別年収の数値は SSR HTML に載せず、ゲート API から認証ユーザーにのみ返す。
   // ここではセクションを描画するか否かだけを判定する。
   const positionEstimateAvailable =
@@ -332,7 +334,12 @@ export default async function CompanyDetailPage({
           />
         )}
 
-        {mhlw && <MhlwSection data={mhlw} />}
+        {mhlwAvailable && (
+          <GatedMhlwSection
+            edinetCode={company.edinetCode}
+            returnTo={`/companies/${company.edinetCode}`}
+          />
+        )}
 
         {peers.length > 0 && (
           <section className="mt-8">

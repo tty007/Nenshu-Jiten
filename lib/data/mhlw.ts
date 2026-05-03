@@ -2,6 +2,12 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
 
+// 型と純粋関数 (isCertified) は client component からも参照されるため
+// server-only を含まない別ファイルに切り出している。互換のためここで再 export。
+export { isCertified } from "./mhlw-types";
+export type { MhlwCompanyData } from "./mhlw-types";
+import type { MhlwCompanyData } from "./mhlw-types";
+
 function client() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -9,51 +15,25 @@ function client() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-export type MhlwCompanyData = {
-  avgOvertimeHours: number | null;
-  overtimeTargetScope: string | null;
-  parentalLeaveMalePct: number | null;
-  parentalLeaveFemalePct: number | null;
-  paidLeaveUptakePct: number | null;
-  femaleChiefRatio: number | null;
-  femaleManagerRatio: number | null;
-  femaleManagerCount: number | null;
-  managerTotalCount: number | null;
-  femaleOfficerRatio: number | null;
-  femaleOfficerCount: number | null;
-  officerTotalCount: number | null;
-  payGapAllPct: number | null;
-  payGapRegularPct: number | null;
-  payGapNonregularPct: number | null;
-  certKurumin: string | null;
-  certKuruminPlus: string | null;
-  certTryKurumin: string | null;
-  certPlatinumKurumin: string | null;
-  certEruboshi: string | null;
-  certPlatinumEruboshi: string | null;
-  certYouthYell: string | null;
-  certNadeshiko: string | null;
-  systemCareerChange: string | null;
-  systemRehireMidcareer: string | null;
-  systemTraining: string | null;
-  systemCareerConsulting: string | null;
-  systemFlextime: string | null;
-  systemTelework: string | null;
-  systemShortHours: string | null;
-  systemFertilityLeave: string | null;
-  systemPaidLeaveHourly: string | null;
-  dataTargetPeriod: string | null;
-  dataAggregationPoint: string | null;
-  dataTargetScope: string | null;
-  dataUpdatedAt: string | null;
-};
-
 function num(v: number | string | null): number | null {
   if (v === null || v === undefined) return null;
   if (typeof v === "number") return v;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
+
+// データの存在だけ判定する軽量クエリ。会社単位で MHLW データが
+// あるかどうかは公開情報なので、ゲート前でも呼んでよい。
+export const hasMhlwForCompany = cache(
+  async (companyId: string): Promise<boolean> => {
+    const sb = client();
+    const { count } = await sb
+      .from("mhlw_company_data")
+      .select("company_id", { head: true, count: "exact" })
+      .eq("company_id", companyId);
+    return (count ?? 0) > 0;
+  }
+);
 
 export const getMhlwForCompany = cache(
   async (companyId: string): Promise<MhlwCompanyData | null> => {
@@ -106,8 +86,3 @@ export const getMhlwForCompany = cache(
   }
 );
 
-// 認定取得済みかどうか（"認定あり" / "認定段階N" / "受賞" を真とみなす）
-export function isCertified(value: string | null): boolean {
-  if (!value) return false;
-  return /認定あり|認定段階|受賞|選定/.test(value) && !/^受賞なし$/.test(value);
-}

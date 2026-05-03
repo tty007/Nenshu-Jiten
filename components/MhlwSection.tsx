@@ -1,6 +1,6 @@
 import { Award, Building2 } from "lucide-react";
-import type { MhlwCompanyData } from "@/lib/data/mhlw";
-import { isCertified } from "@/lib/data/mhlw";
+import type { MhlwCompanyData } from "@/lib/data/mhlw-types";
+import { isCertified } from "@/lib/data/mhlw-types";
 import { formatPercent } from "@/lib/utils";
 
 type Props = {

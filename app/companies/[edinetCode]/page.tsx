@@ -28,17 +28,11 @@ import {
   formatPercent,
 } from "@/lib/utils";
 
-export const revalidate = 86400;
-// Vercel ビルド時に Supabase への大量 SSG 呼び出し（4000+件）が
-// connection timeout を起こして失敗することがあるため、事前生成は行わず
-// on-demand ISR で配信する（初回アクセス時に生成 → 1日キャッシュ）。
-// 検索エンジン用には app/sitemap.ts で全 EDINET コードを列挙しているので
-// クロール経路は維持される。
-export const dynamicParams = true;
-
-export function generateStaticParams() {
-  return [];
-}
+// ヘッダー内の <UserMenu /> が cookies() を読んでログイン状態を出すため、
+// ページ全体を動的レンダリングする必要がある。ISR (revalidate) は
+// cookies() と両立できず DYNAMIC_SERVER_USAGE で 500 になるため使用しない。
+// SEO 用には app/sitemap.ts が全 EDINET コードを列挙しているのでクロール経路は維持される。
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,

@@ -1,7 +1,11 @@
+import Link from "next/link";
+import { Lock } from "lucide-react";
 import { CompanyCard } from "@/components/CompanyCard";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { SearchBox } from "@/components/SearchBox";
+import { getCurrentUser } from "@/lib/auth/get-user";
+import { getMyUserProfile } from "@/lib/profile/get-user-profile";
 import {
   getAllIndustries,
   searchCompaniesPaged,
@@ -34,7 +38,7 @@ export default async function SearchPage({
   const sortKey = (params.sort as SortKey | undefined) ?? "salary";
   const page = Math.max(1, Number(params.page) || 1);
 
-  const [industries, result] = await Promise.all([
+  const [industries, result, user, attrs] = await Promise.all([
     getAllIndustries(),
     searchCompaniesPaged({
       query,
@@ -43,7 +47,26 @@ export default async function SearchPage({
       page,
       pageSize: PAGE_SIZE,
     }),
+    getCurrentUser(),
+    getMyUserProfile(),
   ]);
+  const lockReason: "unauth" | "incomplete_profile" | null = !user
+    ? "unauth"
+    : !attrs ||
+      !attrs.nickname ||
+      !attrs.birthYear ||
+      !attrs.gender ||
+      !attrs.prefecture ||
+      !attrs.careerStatus ||
+      !attrs.salaryBand
+    ? "incomplete_profile"
+    : null;
+  const locked = lockReason !== null;
+  const returnTo = `/search?${new URLSearchParams({
+    ...(query ? { q: query } : {}),
+    ...(industryFilter ? { industry: industryFilter } : {}),
+    sort: sortKey,
+  }).toString()}`;
 
   const headline = query
     ? `「${query}」の検索結果`
@@ -128,24 +151,40 @@ export default async function SearchPage({
                 </p>
               </div>
             ) : (
-              <>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {result.items.map((c) => (
-                    <CompanyCard key={c.id} company={c} />
-                  ))}
+              <div className="relative">
+                <div
+                  className={
+                    locked
+                      ? "pointer-events-none select-none blur-md"
+                      : undefined
+                  }
+                  aria-hidden={locked || undefined}
+                >
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {result.items.map((c) => (
+                      <CompanyCard key={c.id} company={c} />
+                    ))}
+                  </div>
+                  {result.totalPages > 1 && (
+                    <Pagination
+                      page={page}
+                      totalPages={result.totalPages}
+                      baseHref={buildHref({
+                        q: query,
+                        industry: industryFilter,
+                        sort: sortKey,
+                      })}
+                    />
+                  )}
                 </div>
-                {result.totalPages > 1 && (
-                  <Pagination
-                    page={page}
-                    totalPages={result.totalPages}
-                    baseHref={buildHref({
-                      q: query,
-                      industry: industryFilter,
-                      sort: sortKey,
-                    })}
-                  />
+                {locked && lockReason && (
+                  <div className="pointer-events-none absolute inset-0 flex items-start justify-center p-4 pt-24">
+                    <div className="pointer-events-auto sticky top-24">
+                      <SearchUnlockCta reason={lockReason} returnTo={returnTo} />
+                    </div>
+                  </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -267,6 +306,60 @@ function PageLink({
     >
       {label}
     </a>
+  );
+}
+
+function SearchUnlockCta({
+  reason,
+  returnTo,
+}: {
+  reason: "unauth" | "incomplete_profile";
+  returnTo: string;
+}) {
+  return (
+    <div className="max-w-md rounded-2xl border border-surface-border bg-white/95 p-6 text-center shadow-xl backdrop-blur-sm sm:p-8">
+      <div className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-brand-50 text-brand-600">
+        <Lock className="h-5 w-5" aria-hidden />
+      </div>
+      <h3 className="mt-3 text-base font-semibold text-ink">
+        ランキングはメンバー限定です
+      </h3>
+      {reason === "unauth" ? (
+        <>
+          <p className="mt-2 text-sm text-ink-muted">
+            会員登録（無料）とプロフィール入力で、すべての企業情報を見られます。
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Link
+              href={`/auth/sign-in?next=${encodeURIComponent(returnTo)}`}
+              className="inline-flex items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+            >
+              ログイン
+            </Link>
+            <Link
+              href={`/auth/sign-up?next=${encodeURIComponent(returnTo)}`}
+              className="inline-flex items-center justify-center rounded-md border border-surface-border bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-surface-muted"
+            >
+              会員登録
+            </Link>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-ink-muted">
+            マイページのプロフィールをすべて入力すると見られます。
+          </p>
+          <div className="mt-5">
+            <Link
+              href="/mypage"
+              className="inline-flex items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+            >
+              プロフィールを設定する
+            </Link>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

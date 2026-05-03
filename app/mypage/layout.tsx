@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { LogOut } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { signOut } from "@/lib/auth/actions";
 import { getCurrentUser } from "@/lib/auth/get-user";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +37,15 @@ export default async function MypageLayout({
               >
                 設定
               </Link>
+              <form action={signOut} className="mt-2 border-t border-surface-border pt-2">
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-ink-muted hover:bg-surface-muted hover:text-ink"
+                >
+                  <LogOut className="h-4 w-4" aria-hidden />
+                  ログアウト
+                </button>
+              </form>
             </nav>
           </aside>
           <div>{children}</div>

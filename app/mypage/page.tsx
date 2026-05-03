@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { signOut } from "@/lib/auth/actions";
+import { BadgeCheck } from "lucide-react";
+import { EditProfileButton } from "@/components/profile/EditProfileButton";
 import { getCurrentProfile, getCurrentUser } from "@/lib/auth/get-user";
 import { getMyUserProfile } from "@/lib/profile/get-user-profile";
 import {
@@ -24,24 +24,38 @@ export default async function MypagePage() {
     : "-";
   const nickname = profile?.nickname;
   const greetingName = nickname ?? user.email ?? "ゲスト";
+  const isProfileComplete = Boolean(
+    attrs?.nickname &&
+      attrs?.birthYear &&
+      attrs?.gender &&
+      attrs?.prefecture &&
+      attrs?.careerStatus &&
+      attrs?.salaryBand
+  );
   return (
     <section className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">
-          マイページ
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight text-ink">
+            マイページ
+          </h1>
+          {isProfileComplete && (
+            <span
+              title="プロフィールがすべて入力されています"
+              className="inline-flex items-center gap-1 rounded-full border border-positive/30 bg-positive-50 px-2.5 py-0.5 text-xs font-semibold text-positive-600"
+            >
+              <BadgeCheck className="h-3.5 w-3.5" aria-hidden />
+              プロフィール入力完了
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-sm text-ink-muted">{greetingName} さん、ようこそ。</p>
       </div>
 
       {!nickname && (
-        <div className="rounded-2xl border border-brand-100 bg-brand-50/40 p-4 text-sm text-ink sm:p-6">
-          ニックネームがまだ設定されていません。{" "}
-          <Link
-            href="/mypage/settings"
-            className="font-medium text-brand hover:text-brand-700"
-          >
-            プロフィールを設定する
-          </Link>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-100 bg-brand-50/40 p-4 text-sm text-ink sm:p-6">
+          <p>ニックネームがまだ設定されていません。</p>
+          <EditProfileButton initial={attrs} />
         </div>
       )}
 
@@ -79,20 +93,7 @@ export default async function MypagePage() {
           />
         </dl>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link
-            href="/mypage/settings"
-            className="inline-flex items-center gap-1 rounded-md border border-surface-border bg-white px-4 py-2 text-sm font-medium text-ink hover:bg-surface-muted"
-          >
-            設定を変更する
-          </Link>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1 rounded-md border border-surface-border bg-white px-4 py-2 text-sm font-medium text-ink hover:bg-surface-muted"
-            >
-              ログアウト
-            </button>
-          </form>
+          <EditProfileButton initial={attrs} />
         </div>
       </div>
     </section>

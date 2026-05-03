@@ -33,6 +33,13 @@ const NATIONAL_OVERALL_VS_NONPOSITION = NATIONAL.reduce(
   0
 );
 
+// HTML に常時露出して良い情報（役職ラベル＋国の平均年齢のみ）。
+// 会社固有の年収は含まない。
+export type NationalRolePublic = { role: Role; nationalAge: number };
+export const NATIONAL_ROLES_PUBLIC: NationalRolePublic[] = NATIONAL.map(
+  (n) => ({ role: n.role, nationalAge: n.ageYears })
+);
+
 export type PositionSalaryEstimate = {
   role: Role;
   nationalAge: number;

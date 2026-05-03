@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import {
   CAREER_STATUSES,
   CAREER_STATUS_LABELS,
@@ -30,14 +30,21 @@ const birthYears = Array.from(
 
 export function UserProfileForm({
   initial,
+  onSuccess,
 }: {
   initial: UserProfile | null;
+  onSuccess?: () => void;
 }) {
   const [state, formAction] = useActionState<ActionResult | null, FormData>(
     updateUserProfile,
     null
   );
   const fieldErrors = state && !state.ok ? state.fieldErrors ?? {} : {};
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+  useEffect(() => {
+    if (state?.ok) onSuccessRef.current?.();
+  }, [state]);
   return (
     <form action={formAction} className="space-y-5">
       <FieldRow

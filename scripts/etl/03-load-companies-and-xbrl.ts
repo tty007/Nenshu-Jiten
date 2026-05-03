@@ -136,6 +136,8 @@ async function main() {
             name: meta.name,
             industry_code: industryCode,
             headquarters: meta.headquarters,
+            representative: meta.representative,
+            fiscal_year_end_month: meta.fiscalYearEndMonth,
             description: null,
           },
           { onConflict: "edinet_code" }

@@ -7,6 +7,7 @@ import { CompanyHero } from "@/components/CompanyHero";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { MetricCard } from "@/components/MetricCard";
+import { CompanyBasicInfoTable } from "@/components/CompanyBasicInfoTable";
 import { GatedMhlwSection } from "@/components/GatedMhlwSection";
 import { GatedPositionSalary } from "@/components/GatedPositionSalary";
 import { EarningsTrendChart } from "@/components/charts/EarningsTrendChart";
@@ -340,6 +341,8 @@ export default async function CompanyDetailPage({
             returnTo={`/companies/${company.edinetCode}`}
           />
         )}
+
+        <CompanyBasicInfoTable company={company} latest={latest} />
 
         {peers.length > 0 && (
           <section className="mt-8">

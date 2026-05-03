@@ -128,12 +128,19 @@ export default function PrivacyPolicyPage() {
                   <td className="py-2 pr-4">システムメール送信</td>
                   <td className="py-2">米国</td>
                 </tr>
-                <tr>
+                <tr className="border-b border-surface-border">
                   <td className="py-2 pr-4">OpenAI, L.L.C.</td>
                   <td className="py-2 pr-4">
                     企業概要文の自動生成（公開済みの企業情報のみを送信し、利用者の個人情報は送信しません）
                   </td>
                   <td className="py-2">米国</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4">経済産業省 gBizINFO</td>
+                  <td className="py-2 pr-4">
+                    企業基本情報（設立年月日・公式サイト・資本金・法人番号等）の取得（公開済みの法人情報のみを照会し、利用者の個人情報は送信しません）
+                  </td>
+                  <td className="py-2">日本</td>
                 </tr>
               </tbody>
             </table>

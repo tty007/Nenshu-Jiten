@@ -352,6 +352,21 @@ async function main() {
     ]);
   }
 
+  // 8. gBizINFO から HP・設立年月日・資本金・代表者を補完（未取得分のみ）
+  if (process.env.GBIZINFO_API_TOKEN) {
+    console.log("[daily] 07-import-gbizinfo を実行（未取得分のみ）");
+    try {
+      await spawnChild("npx", [
+        "tsx",
+        "scripts/etl/07-import-gbizinfo.ts",
+      ]);
+    } catch (e) {
+      console.warn("[daily] 07 失敗（継続）:", (e as Error).message);
+    }
+  } else {
+    console.log("[daily] GBIZINFO_API_TOKEN 未設定のため 07 をスキップ");
+  }
+
   console.log("[daily] 全処理完了");
 }
 

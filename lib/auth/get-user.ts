@@ -11,7 +11,7 @@ export type CurrentUser = {
 export type CurrentProfile = {
   id: string;
   email: string;
-  displayName: string | null;
+  nickname: string | null;
   createdAt: string;
 };
 
@@ -31,17 +31,24 @@ export const getCurrentProfile = cache(
     const user = await getCurrentUser();
     if (!user) return null;
     const sb = await createSupabaseServerClient();
-    const { data, error } = await sb
-      .from("profiles")
-      .select("id, email, display_name, created_at")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (error || !data) return null;
+    const [profileRes, attrRes] = await Promise.all([
+      sb
+        .from("profiles")
+        .select("id, email, created_at")
+        .eq("id", user.id)
+        .maybeSingle(),
+      sb
+        .from("user_profiles")
+        .select("nickname")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
+    if (profileRes.error || !profileRes.data) return null;
     return {
-      id: data.id,
-      email: data.email,
-      displayName: data.display_name,
-      createdAt: data.created_at,
+      id: profileRes.data.id,
+      email: profileRes.data.email,
+      nickname: attrRes.data?.nickname ?? null,
+      createdAt: profileRes.data.created_at,
     };
   }
 );

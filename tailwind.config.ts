@@ -9,11 +9,12 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#1E3A8A",
-          50: "#EEF2FF",
-          100: "#E0E7FF",
-          500: "#1E3A8A",
-          600: "#1E40AF",
+          DEFAULT: "#2563EB",
+          50: "#EFF6FF",
+          100: "#DBEAFE",
+          400: "#60A5FA",
+          500: "#3B82F6",
+          600: "#2563EB",
           700: "#1D4ED8",
         },
         positive: {
@@ -22,9 +23,9 @@ const config: Config = {
           600: "#047857",
         },
         negative: {
-          DEFAULT: "#D97706",
-          50: "#FFFBEB",
-          600: "#B45309",
+          DEFAULT: "#DC2626",
+          50: "#FEF2F2",
+          600: "#B91C1C",
         },
         ink: {
           DEFAULT: "#111827",

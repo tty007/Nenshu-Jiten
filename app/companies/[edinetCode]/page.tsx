@@ -8,7 +8,7 @@ import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { MetricCard } from "@/components/MetricCard";
 import { MhlwSection } from "@/components/MhlwSection";
-import { PositionSalaryEstimateSection } from "@/components/PositionSalaryEstimate";
+import { GatedPositionSalary } from "@/components/GatedPositionSalary";
 import { EarningsTrendChart } from "@/components/charts/EarningsTrendChart";
 import { SalaryTrendChart } from "@/components/charts/SalaryTrendChart";
 import {
@@ -22,7 +22,6 @@ import {
   getIndustryAverageHistory,
 } from "@/lib/data/industry-averages";
 import { getMhlwForCompany } from "@/lib/data/mhlw";
-import { estimatePositionSalaries } from "@/lib/data/position-salary";
 import {
   diffPercent,
   formatDiff,
@@ -75,10 +74,13 @@ export default async function CompanyDetailPage({
     : [];
 
   const mhlw = await getMhlwForCompany(company.id);
-  const positionEstimate = estimatePositionSalaries(
-    latest.averageAge,
-    latest.averageAnnualSalary
-  );
+  // 役職別年収の数値は SSR HTML に載せず、ゲート API から認証ユーザーにのみ返す。
+  // ここではセクションを描画するか否かだけを判定する。
+  const positionEstimateAvailable =
+    latest.averageAge !== null &&
+    latest.averageAge > 0 &&
+    latest.averageAnnualSalary !== null &&
+    latest.averageAnnualSalary > 0;
 
   const salaryIndustryDiff =
     indNow && latest.averageAnnualSalary !== null
@@ -324,10 +326,11 @@ export default async function CompanyDetailPage({
           </section>
         )}
 
-        {positionEstimate && (
-          <PositionSalaryEstimateSection
-            result={positionEstimate}
+        {positionEstimateAvailable && (
+          <GatedPositionSalary
+            edinetCode={company.edinetCode}
             fiscalYear={latest.fiscalYear}
+            returnTo={`/companies/${company.edinetCode}`}
           />
         )}
 

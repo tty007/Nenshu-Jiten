@@ -10,7 +10,6 @@ import {
   resetPasswordSchema,
   signInSchema,
   signUpSchema,
-  updateDisplayNameSchema,
   updateEmailSchema,
   updatePasswordSchema,
 } from "./schemas";
@@ -179,32 +178,6 @@ export async function resetPassword(
 }
 
 // ----- Mypage actions -----
-export async function updateDisplayName(
-  _prev: ActionResult | null,
-  formData: FormData
-): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "ログインが必要です" };
-  const parsed = updateDisplayNameSchema.safeParse({
-    displayName: formData.get("displayName"),
-  });
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: "入力内容を確認してください",
-      fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
-    };
-  }
-  const sb = await createSupabaseServerClient();
-  const { error } = await sb
-    .from("profiles")
-    .update({ display_name: parsed.data.displayName })
-    .eq("id", user.id);
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/mypage");
-  return { ok: true, message: "表示名を更新しました" };
-}
-
 export async function updateEmail(
   _prev: ActionResult | null,
   formData: FormData

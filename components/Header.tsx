@@ -6,16 +6,8 @@ export function Header({ showSearch = true }: { showSearch?: boolean }) {
   return (
     <header className="sticky top-0 z-30 border-b border-surface-border bg-white/85 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white"
-          >
-            <span className="font-numeric text-sm font-bold tracking-tight">
-              Y
-            </span>
-          </span>
-          <span className="text-base font-semibold tracking-tight text-ink">
+        <Link href="/" className="flex items-center">
+          <span className="bg-gradient-to-r from-blue-700 to-sky-400 bg-clip-text text-lg font-bold tracking-tight text-transparent">
             年収辞典
           </span>
         </Link>

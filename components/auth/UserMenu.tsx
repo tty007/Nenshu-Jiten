@@ -20,7 +20,7 @@ export async function UserMenu() {
     );
   }
 
-  const label = profile?.displayName || user.email || "アカウント";
+  const label = profile?.nickname || user.email || "アカウント";
   const initial = (label.match(/[A-Za-z0-9ぁ-んァ-ヶ一-龯]/)?.[0] ?? "U").toUpperCase();
 
   return (

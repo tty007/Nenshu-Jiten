@@ -1,18 +1,14 @@
 import { DeleteAccountForm } from "@/components/auth/DeleteAccountForm";
-import { UpdateDisplayNameForm } from "@/components/auth/UpdateDisplayNameForm";
 import { UpdateEmailForm } from "@/components/auth/UpdateEmailForm";
 import { UpdatePasswordForm } from "@/components/auth/UpdatePasswordForm";
-import { getCurrentProfile, getCurrentUser } from "@/lib/auth/get-user";
+import { getCurrentUser } from "@/lib/auth/get-user";
 
 export const metadata = {
   title: "アカウント設定",
 };
 
 export default async function SettingsPage() {
-  const [user, profile] = await Promise.all([
-    getCurrentUser(),
-    getCurrentProfile(),
-  ]);
+  const user = await getCurrentUser();
   if (!user) return null;
   return (
     <section className="space-y-8">
@@ -21,13 +17,9 @@ export default async function SettingsPage() {
           アカウント設定
         </h1>
         <p className="mt-1 text-sm text-ink-muted">
-          表示名・メールアドレス・パスワードの変更や、退会ができます。
+          メールアドレス・パスワードの変更や、退会ができます。プロフィール属性の編集はマイページから行えます。
         </p>
       </div>
-
-      <SettingCard title="表示名">
-        <UpdateDisplayNameForm defaultValue={profile?.displayName ?? ""} />
-      </SettingCard>
 
       <SettingCard title="メールアドレス">
         <UpdateEmailForm defaultValue={user.email ?? ""} />

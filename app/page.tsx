@@ -134,7 +134,7 @@ export default async function HomePage() {
               className="object-contain object-right-top"
             />
           </div>
-          <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-12 lg:px-8">
+          <div className="relative mx-auto grid max-w-7xl gap-10 px-6 py-14 sm:px-8 sm:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-12 lg:px-8">
             <div>
               <h1 className="text-3xl font-bold leading-tight tracking-tight sm:text-5xl sm:leading-tight">
                 <span className="bg-gradient-to-r from-blue-700 to-sky-400 bg-clip-text text-transparent">
@@ -180,7 +180,7 @@ export default async function HomePage() {
 
         {/* KPI stats */}
         <section className="bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-6 py-14 sm:px-8 lg:px-8">
             <div className="flex items-end justify-between gap-4">
             <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
               数字でわかる年収辞典
@@ -220,7 +220,7 @@ export default async function HomePage() {
 
         {/* Popular ranking */}
         <section className="border-y border-surface-border bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-6 py-14 sm:px-8 lg:px-8">
             <div className="flex items-end justify-between gap-4">
               <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
                 人気のランキング
@@ -239,7 +239,7 @@ export default async function HomePage() {
         </section>
 
         {/* Salary distribution */}
-        <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+        <section className="mx-auto max-w-7xl px-6 py-14 sm:px-8 lg:px-8">
           <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
             平均年収の分布
           </h2>
@@ -256,7 +256,7 @@ export default async function HomePage() {
 
         {/* Use cases */}
         <section className="bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-6 py-14 sm:px-8 lg:px-8">
             <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
               こんなときに使われています
             </h2>
@@ -286,7 +286,7 @@ export default async function HomePage() {
 
         {/* Featured / recent companies */}
         <section className="border-t border-surface-border bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-6 py-14 sm:px-8 lg:px-8">
             <div className="flex items-end justify-between">
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
@@ -317,7 +317,7 @@ export default async function HomePage() {
         </section>
 
         {/* Industries */}
-        <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+        <section className="mx-auto max-w-7xl px-6 py-14 sm:px-8 lg:px-8">
           <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
             業界から探す
           </h2>
@@ -344,7 +344,7 @@ export default async function HomePage() {
 
         {/* Bottom CTA */}
         <section className="border-t border-surface-border bg-gradient-to-br from-brand-50 to-white">
-          <div className="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 py-12 text-center sm:px-6 sm:py-16 lg:flex-row lg:justify-between lg:gap-8 lg:text-left lg:px-8">
+          <div className="mx-auto flex max-w-7xl flex-col items-center gap-6 px-6 py-12 text-center sm:px-8 sm:py-16 lg:flex-row lg:justify-between lg:gap-8 lg:text-left lg:px-8">
             <div className="flex items-center gap-4">
               <Database
                 className="hidden h-10 w-10 text-brand-600 sm:block"

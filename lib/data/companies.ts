@@ -304,10 +304,14 @@ const SORT_COLUMNS: Record<SortKey, string> = {
 
 export type SearchPageParams = {
   query?: string;
-  industryCode?: string;
+  /** 業界コードの配列。空 or 未指定なら全業界 */
+  industryCodes?: string[];
   sort?: SortKey;
   page?: number;
   pageSize?: number;
+  // 平均年収レンジ（円）。null は無制限。
+  salaryMinYen?: number | null;
+  salaryMaxYen?: number | null;
 };
 
 export type SearchPageResult = {
@@ -335,7 +339,15 @@ export async function searchCompaniesPaged(
     .order(SORT_COLUMNS[sort], { ascending: false, nullsFirst: false })
     .range(from, to);
 
-  if (params.industryCode) q = q.eq("industry_code", params.industryCode);
+  if (params.industryCodes && params.industryCodes.length > 0) {
+    q = q.in("industry_code", params.industryCodes);
+  }
+  if (params.salaryMinYen != null) {
+    q = q.gte("latest_avg_salary", params.salaryMinYen);
+  }
+  if (params.salaryMaxYen != null) {
+    q = q.lte("latest_avg_salary", params.salaryMaxYen);
+  }
   if (params.query) {
     const safe = params.query.replace(/[%_]/g, "");
     const or = [

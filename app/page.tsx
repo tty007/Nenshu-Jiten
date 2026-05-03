@@ -46,7 +46,7 @@ const useCases = [
       "気になる会社の年収・働き方の指標を、業界平均と並べて確認できます。",
   },
   {
-    image: "/illustrations/use-growth.jpg",
+    image: "/illustrations/use-growth.png",
     title: "企業研究を効率化",
     description:
       "売上・従業員数・年収の推移を時系列のチャートで把握できます。",
@@ -120,6 +120,20 @@ export default async function HomePage() {
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(37,99,235,0.10),_transparent_55%)]"
           />
+          {/* モバイル: イラストを薄く背景化 */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute right-[-5%] top-4 h-48 w-1/2 opacity-15 sm:h-64 lg:hidden"
+          >
+            <Image
+              src="/illustrations/hero.png"
+              alt=""
+              fill
+              priority
+              sizes="(max-width: 1024px) 50vw, 0px"
+              className="object-contain object-right-top"
+            />
+          </div>
           <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-12 lg:px-8">
             <div>
               <h1 className="text-3xl font-bold leading-tight tracking-tight sm:text-5xl sm:leading-tight">
@@ -150,12 +164,13 @@ export default async function HomePage() {
                 </p>
               </div>
             </div>
-            <div className="relative mx-auto w-full max-w-md lg:max-w-none">
+            {/* デスクトップ: 横並びのイラスト */}
+            <div className="relative mx-auto hidden w-full max-w-sm lg:block lg:max-w-md">
               <Image
                 src="/illustrations/hero.png"
                 alt=""
-                width={720}
-                height={720}
+                width={560}
+                height={560}
                 priority
                 className="h-auto w-full"
               />
@@ -164,8 +179,9 @@ export default async function HomePage() {
         </section>
 
         {/* KPI stats */}
-        <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <div className="flex items-end justify-between gap-4">
+        <section className="bg-white">
+          <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+            <div className="flex items-end justify-between gap-4">
             <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
               数字でわかる年収辞典
             </h2>
@@ -199,10 +215,11 @@ export default async function HomePage() {
               unit=""
             />
           </div>
+          </div>
         </section>
 
         {/* Popular ranking */}
-        <section className="border-y border-surface-border bg-surface-muted/40">
+        <section className="border-y border-surface-border bg-white">
           <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
             <div className="flex items-end justify-between gap-4">
               <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
@@ -229,7 +246,7 @@ export default async function HomePage() {
           <p className="mt-1 text-sm text-ink-muted">
             上場企業全社の平均年収を 100 万円刻みで集計
           </p>
-          <div className="mt-6">
+          <div className="mt-6 pr-2 sm:pr-4">
             <SalaryDistributionChart
               buckets={salaryDist.buckets}
               averageYen={salaryDist.averageYen}
@@ -238,38 +255,37 @@ export default async function HomePage() {
         </section>
 
         {/* Use cases */}
-        <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
-            こんなときに使われています
-          </h2>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {useCases.map((u) => (
-              <div
-                key={u.title}
-                className="rounded-2xl border border-surface-border bg-white p-5 sm:p-6"
-              >
-                <div className="flex h-32 items-center justify-center">
-                  <Image
-                    src={u.image}
-                    alt=""
-                    width={300}
-                    height={300}
-                    className="h-full w-auto object-contain"
-                  />
+        <section className="bg-white">
+          <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+            <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
+              こんなときに使われています
+            </h2>
+            <div className="mt-6 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+              {useCases.map((u) => (
+                <div key={u.title}>
+                  <div className="flex h-32 items-center justify-center sm:h-36">
+                    <Image
+                      src={u.image}
+                      alt=""
+                      width={400}
+                      height={400}
+                      className="h-full w-auto object-contain"
+                    />
+                  </div>
+                  <h3 className="mt-4 text-base font-semibold text-ink">
+                    {u.title}
+                  </h3>
+                  <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+                    {u.description}
+                  </p>
                 </div>
-                <h3 className="mt-4 text-base font-semibold text-ink">
-                  {u.title}
-                </h3>
-                <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-                  {u.description}
-                </p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
 
         {/* Featured / recent companies */}
-        <section className="border-t border-surface-border bg-surface-muted/40">
+        <section className="border-t border-surface-border bg-white">
           <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
             <div className="flex items-end justify-between">
               <div>
@@ -308,12 +324,15 @@ export default async function HomePage() {
           <p className="mt-1 text-sm text-ink-muted">
             業界平均と比較しながら企業を見ていきましょう
           </p>
-          <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-6 divide-y divide-surface-border border-y border-surface-border sm:grid sm:grid-cols-2 sm:gap-x-8 sm:divide-y-0 sm:border-0 lg:grid-cols-3">
             {industries.map((ind) => (
-              <li key={ind.code}>
+              <li
+                key={ind.code}
+                className="sm:border-b sm:border-surface-border"
+              >
                 <Link
                   href={`/search?industry=${ind.code}`}
-                  className="flex items-center justify-between rounded-xl border border-surface-border bg-white px-5 py-4 text-sm font-medium text-ink transition hover:border-brand-100 hover:bg-brand-50/40"
+                  className="flex items-center justify-between gap-3 py-3 text-sm font-medium text-ink transition hover:text-brand-700"
                 >
                   <span>{ind.name}</span>
                   <ArrowRight className="h-4 w-4 text-ink-muted" />

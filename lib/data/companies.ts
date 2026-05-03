@@ -31,6 +31,11 @@ type DbCompany = {
   website_url: string | null;
   headquarters: string | null;
   founded_year: number | null;
+  founded_at: string | null;
+  representative: string | null;
+  corporate_number: string | null;
+  capital_stock_yen: number | string | null;
+  fiscal_year_end_month: number | null;
   logo_url: string | null;
   cover_image_url: string | null;
   industries: { code: string; name: string } | null;
@@ -54,7 +59,7 @@ type DbMetric = {
 };
 
 const COMPANY_SELECT =
-  "id, edinet_code, securities_code, name, name_kana, industry_code, listed_market, description, summary, summary_generated_at, summary_source_doc_id, website_url, headquarters, founded_year, logo_url, cover_image_url, industries(code, name)";
+  "id, edinet_code, securities_code, name, name_kana, industry_code, listed_market, description, summary, summary_generated_at, summary_source_doc_id, website_url, headquarters, founded_year, founded_at, representative, corporate_number, capital_stock_yen, fiscal_year_end_month, logo_url, cover_image_url, industries(code, name)";
 
 const METRIC_SELECT =
   "company_id, fiscal_year, average_annual_salary, average_age, average_tenure_years, employee_count, female_manager_ratio, average_overtime_hours, revenue, operating_income, ordinary_income, net_income, doc_id, submitted_at";
@@ -90,6 +95,11 @@ function mapCompany(c: DbCompany): Company {
     websiteUrl: c.website_url,
     headquarters: c.headquarters,
     foundedYear: c.founded_year,
+    foundedAt: c.founded_at,
+    representative: c.representative,
+    corporateNumber: c.corporate_number,
+    capitalStockYen: num(c.capital_stock_yen),
+    fiscalYearEndMonth: c.fiscal_year_end_month,
     logoUrl: c.logo_url,
     brandColor: brandColorFor(industryCode),
     coverImageUrl: c.cover_image_url,

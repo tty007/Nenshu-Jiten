@@ -111,7 +111,9 @@ export type CompanyMeta = {
   nameEn: string | null;
   nameKana: string | null;
   headquarters: string | null;
+  representative: string | null;
   fiscalYearEnd: string | null;
+  fiscalYearEndMonth: number | null;
   filingDate: string | null;
   accountingStandard: string | null;
 };
@@ -132,7 +134,21 @@ export function extractCompanyMeta(facts: Map<string, XbrlFact>): CompanyMeta {
     "jpcrp_cor:AddressOfRegisteredHeadquarterCoverPage",
     COVER
   );
+  const representative = getFact(
+    facts,
+    "jpcrp_cor:TitleAndNameOfRepresentativeCoverPage",
+    COVER
+  );
   const fiscalYearEnd = getFact(facts, "jpdei_cor:CurrentFiscalYearEndDateDEI", COVER);
+  // YYYY-MM-DD → 月だけ取り出す
+  const fiscalYearEndMonth = fiscalYearEnd
+    ? (() => {
+        const m = /^(\d{4})-(\d{2})/.exec(fiscalYearEnd);
+        if (!m) return null;
+        const month = Number(m[2]);
+        return month >= 1 && month <= 12 ? month : null;
+      })()
+    : null;
   const filingDate = getFact(facts, "jpcrp_cor:FilingDateCoverPage", COVER);
   const accountingStandard = getFact(facts, "jpdei_cor:AccountingStandardsDEI", COVER);
   return {
@@ -142,7 +158,9 @@ export function extractCompanyMeta(facts: Map<string, XbrlFact>): CompanyMeta {
     nameEn,
     nameKana,
     headquarters,
+    representative,
     fiscalYearEnd,
+    fiscalYearEndMonth,
     filingDate,
     accountingStandard,
   };

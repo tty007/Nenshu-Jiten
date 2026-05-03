@@ -27,6 +27,11 @@ export type Company = {
   websiteUrl: string | null;
   headquarters: string | null;
   foundedYear: number | null;
+  foundedAt: string | null; // ISO date (YYYY-MM-DD)
+  representative: string | null;
+  corporateNumber: string | null;
+  capitalStockYen: number | null;
+  fiscalYearEndMonth: number | null;
   logoUrl?: string | null;
   brandColor: BrandColor;
   coverImageUrl: string | null;

@@ -12,7 +12,6 @@ import { GatedPositionSalary } from "@/components/GatedPositionSalary";
 import { EarningsTrendChart } from "@/components/charts/EarningsTrendChart";
 import { SalaryTrendChart } from "@/components/charts/SalaryTrendChart";
 import {
-  getAllCompanies,
   getCompaniesByIndustry,
   getCompanyByEdinetCode,
   getCompanyRankInIndustry,
@@ -30,10 +29,15 @@ import {
 } from "@/lib/utils";
 
 export const revalidate = 86400;
+// Vercel ビルド時に Supabase への大量 SSG 呼び出し（4000+件）が
+// connection timeout を起こして失敗することがあるため、事前生成は行わず
+// on-demand ISR で配信する（初回アクセス時に生成 → 1日キャッシュ）。
+// 検索エンジン用には app/sitemap.ts で全 EDINET コードを列挙しているので
+// クロール経路は維持される。
+export const dynamicParams = true;
 
-export async function generateStaticParams() {
-  const all = await getAllCompanies();
-  return all.map((c) => ({ edinetCode: c.edinetCode }));
+export function generateStaticParams() {
+  return [];
 }
 
 export async function generateMetadata({

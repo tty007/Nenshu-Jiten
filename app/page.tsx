@@ -368,7 +368,7 @@ export default async function HomePage() {
               </Link>
               <Link
                 href="/search"
-                className="inline-flex items-center justify-center gap-1 rounded-md border border-surface-border bg-white px-5 py-2.5 text-sm font-semibold text-ink hover:bg-surface-muted"
+                className="inline-flex items-center justify-center gap-1 rounded-md bg-gradient-to-r from-blue-700 to-sky-400 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-blue-800 hover:to-sky-500"
               >
                 企業を検索する
                 <ArrowRight className="h-4 w-4" />

@@ -77,7 +77,7 @@ export function HomeRankingTabs({
         <div className="mt-4 text-center">
           <Link
             href={`/search?sort=${active}`}
-            className="inline-flex items-center justify-center gap-1 rounded-md border border-surface-border bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand-100 hover:bg-brand-50/40 hover:text-brand-700"
+            className="inline-flex items-center justify-center gap-1 rounded-md bg-gradient-to-r from-blue-700 to-sky-400 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-blue-800 hover:to-sky-500"
           >
             ランキングをもっと見る
             <ArrowRight className="h-4 w-4" />

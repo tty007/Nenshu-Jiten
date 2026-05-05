@@ -1,6 +1,6 @@
-# 企業年収・情報比較サービス 設計指示書
+# 年収事典（Nenshu-Jiten）設計指示書
 
-> このドキュメントは、Next.js + Supabase + Vercel 構成で開発する「企業年収・情報比較サービス」の全体設計をまとめたものです。AIコーディングツール（Cursor / Claude Code 等）に読ませて開発を進める前提で記述しています。
+> このドキュメントは、Next.js + Supabase + Vercel 構成で開発している「企業年収・情報比較サービス『年収事典』」の現行設計をまとめたものです。AI コーディングツール（Cursor / Claude Code 等）に読ませて開発を進める前提で記述しています。コードと食い違いが出た場合は実装側を正とし、本書を更新してください。
 
 ---
 
@@ -8,7 +8,12 @@
 
 ### 1.1 サービスコンセプト
 
-有価証券報告書（EDINET の XBRL ファイル）を自動取得し、企業の年収・勤続年数・従業員数・女性管理職比率・残業時間・業績などを **業界平均と比較できる形で可視化する** Webサービス。
+有価証券報告書（EDINET の XBRL ファイル）を中心に、上場企業の年収・勤続年数・従業員数・女性管理職比率・残業時間・業績などを **業界平均と比較できる形で可視化する** 公開 Web サービス。あわせて以下の公的データも統合し、一次情報のみで構成された企業ページを提供する。
+
+- 金融庁 EDINET（有価証券報告書 XBRL）
+- 経済産業省 gBizINFO（法人番号・設立日・資本金・代表者・公式 HP）
+- 厚生労働省「女性の活躍推進企業データベース」（女性活躍・両立支援の取組）
+- 厚生労働省「賃金構造基本統計調査」（役職別賃金）
 
 ### 1.2 ターゲットユーザー
 
@@ -16,17 +21,17 @@
 - **サブターゲット**: 就活生
 - 年収・働きやすさの「客観的な数字」を重視する層
 
-### 1.3 提供価値（なぜ既存の口コミ系サービスより優れているか）
+### 1.3 提供価値
 
-- **一次情報のみを扱う**（有報ベースなので客観・正確）
+- **一次情報のみを扱う**（有報・公的統計ベースなので客観・正確）
 - **業界平均との比較**で「相対的にどうなのか」がわかる
 - **完全無料・広告なし**でストレスなく閲覧可能
-- 経年変化（年収推移、従業員数推移）が見える
+- 経年変化（年収推移、業績推移）が見える
 
 ### 1.4 収益化方針
 
-- **MVP段階では完全無料・広告なし**
-- 運用コストは個人負担を前提に、Supabase / Vercel の無料枠 〜 低価格枠で収まる設計を意識する
+- **MVP〜現状は完全無料・広告なし**
+- 運用コストは個人負担を前提に、Supabase / Vercel の無料枠 〜 低価格枠で収まる設計
 
 ---
 
@@ -34,15 +39,19 @@
 
 | レイヤー         | 採用技術                                                                  |
 | ---------------- | ------------------------------------------------------------------------- |
-| フロントエンド   | Next.js 15（App Router）+ TypeScript                                      |
-| UIライブラリ     | Tailwind CSS + shadcn/ui                                                  |
+| フロントエンド   | Next.js 15（App Router, React 19）+ TypeScript                            |
+| UI               | Tailwind CSS v3 + 自前コンポーネント（lucide-react アイコン）             |
 | データベース     | Supabase（PostgreSQL）                                                    |
-| 認証             | 管理画面のみ Supabase Auth（メール/パスワード）。一般ユーザー側は認証不要 |
-| ホスティング     | Vercel                                                                    |
-| データ取得バッチ | Vercel Cron Jobs もしくは Supabase Edge Functions                         |
-| XBRL パース      | `xbrl-to-json` 系ライブラリ または自前パーサ                              |
-| グラフ描画       | visx（@visx/\*）                                                          |
-| 企業概要生成     | Anthropic Claude API（有報からの客観的サマリ生成）                        |
+| 認証             | Supabase Auth — 一般会員（email/password + Google OAuth）と管理者で共通   |
+| 管理者判定       | env `ADMIN_EMAILS`（カンマ区切りメール allowlist）                        |
+| ホスティング     | Vercel（`@vercel/analytics`）                                             |
+| ETL バッチ       | ローカル実行の `scripts/etl/*.ts`（tsx）— 現状は手動運用                  |
+| XBRL パース      | EDINET の CSV 配布物 + `fast-xml-parser` / `jszip`（`scripts/etl/lib/xbrl.ts`） |
+| グラフ描画       | visx（`@visx/scale` `axis` `shape` `group` `responsive` `tooltip` `grid` `curve` `event`） |
+| 企業概要生成     | OpenAI（`gpt-4o-mini` 既定 / `OPENAI_MODEL` で切替可）                    |
+| バリデーション   | zod                                                                       |
+
+`package.json` も併せて確認のこと。LLM は当初 Anthropic Claude を想定していたが、コスト/品質/取り回しの観点で OpenAI に切り替えた経緯がある（`scripts/etl/06-generate-summaries.ts`）。`.env.example` の `ANTHROPIC_API_KEY` は将来の差し替え余地として残しているのみ。
 
 ---
 
@@ -50,712 +59,461 @@
 
 ### 3.1 設計方針
 
-ユーザー要望に従い、**生データ層と整形済みデータ層を分離**する。
+- **生データ層と整形済みデータ層を分離**する
+- フロント（`anon` キー）からは整形済みテーブルのみ参照、生データ層は `service_role` のみ書込・読込
+- ETL から書込むテーブルはすべて RLS を有効化し、`service_role` でバイパスする運用
 
 ```
-[EDINET API] → [raw_xbrl_documents（生データ）] → [ETL] → [companies / financial_metrics（整形）] → [Next.js]
+[EDINET API] → [raw_xbrl_documents（生データ）] → [ETL] → [companies / financial_metrics / industry_averages] → [Next.js]
+[gBizINFO]   →                                  → companies の基本情報カラム
+[厚労省 CSV] →                                  → mhlw_company_data
 ```
 
-この分離により：
+### 3.2 テーブル一覧（マイグレーション順）
 
-- XBRLの仕様変更や再パースが必要になっても生データから再生成できる
-- フロントエンドは整形済みテーブルのみを参照するので高速
+| マイグレーション | 追加内容 |
+| --- | --- |
+| `20260426000001_initial_schema.sql` | `industries` / `companies` / `financial_metrics` / `industry_averages` / `raw_xbrl_documents` + RLS + `set_updated_at()` |
+| `20260430123836_add_user_profiles_table.sql` | `user_profiles` 新設、`profiles.display_name` を撤去して `user_profiles.nickname` へ移行、`handle_new_user()` 更新 |
+| `20260503080740_company_basic_profile.sql` | `companies` に `representative` / `corporate_number` / `capital_stock_yen` / `founded_at` / `fiscal_year_end_month` を追加 |
+| `20260505075310_user_favorites.sql` | `user_favorites`（会員のお気に入り企業）新設 |
 
-### 3.2 テーブル構成（最小構成）
+> このほか、`profiles`（auth ユーザーの軽い拡張）と `mhlw_company_data`（厚労省データ）、`companies` のサマリ用カラム（`latest_avg_salary` / `latest_tenure_years` / `latest_submitted_at` 等）が Supabase 側に存在する。リポジトリ内マイグレーションには未収録のため、リモートを起点に整理する際は `mcp__supabase__list_tables` で実態を確認すること。
 
-#### `raw_xbrl_documents` — 生データ層
+#### 3.2.1 `raw_xbrl_documents` — 生データ層
 
-| カラム       | 型          | 説明                         |
-| ------------ | ----------- | ---------------------------- |
-| id           | uuid        | PK                           |
-| edinet_code  | text        | EDINETコード                 |
-| doc_id       | text        | EDINET書類管理番号（unique） |
-| fiscal_year  | int         | 対象事業年度                 |
-| submitted_at | timestamptz | 提出日時                     |
-| raw_xbrl     | jsonb       | XBRL → JSON変換後の生データ  |
-| created_at   | timestamptz |                              |
+`id / edinet_code / doc_id(UNIQUE) / ordinance_code / form_code / doc_type_code / fiscal_year / period_start / period_end / submitted_at / filer_name / raw_xbrl(jsonb) / storage_path / parsed_at / parse_error / created_at`
 
-#### `companies` — 企業マスタ
+XBRL ZIP 本体は Supabase Storage に置く想定（`storage_path` で参照）。XBRL 仕様変更時に再パースできる安全網として保持。
 
-| カラム                | 型          | 説明                                                              |
-| --------------------- | ----------- | ----------------------------------------------------------------- |
-| id                    | uuid        | PK                                                                |
-| edinet_code           | text        | unique                                                            |
-| securities_code       | text        | 証券コード（4桁）                                                 |
-| name                  | text        | 企業名                                                            |
-| name_kana             | text        | カナ                                                              |
-| industry_code         | text        | 業界コード（FK）                                                  |
-| listed_market         | text        | 市場区分（プライム等）                                            |
-| logo_url              | text        | nullable                                                          |
-| description           | text        | 事業概要（有報から自動抽出した原文の抜粋）                        |
-| summary               | text        | 企業概要（LLMが生成した第三者目線の客観的まとめ、四季報スタイル） |
-| summary_generated_at  | timestamptz | 概要生成日時                                                      |
-| summary_source_doc_id | text        | 概要生成に使った有報のdoc_id                                      |
-| website_url           | text        |                                                                   |
-| updated_at            | timestamptz |                                                                   |
+#### 3.2.2 `companies` — 企業マスタ
 
-#### `industries` — 業界マスタ
+| カラム                  | 出典                            |
+| ----------------------- | ------------------------------- |
+| `edinet_code` (UNIQUE)  | EDINET                          |
+| `securities_code`       | EDINET                          |
+| `name` / `name_kana`    | EDINET                          |
+| `industry_code`         | EDINET → `industries`           |
+| `listed_market`         | EDINET（プライム/スタンダード/グロース） |
+| `description`           | 有報原文の抜粋                  |
+| `summary` / `summary_generated_at` / `summary_source_doc_id` | LLM 生成 |
+| `website_url`           | gBizINFO                        |
+| `headquarters`          | EDINET                          |
+| `founded_year` / `founded_at` | 有報 / gBizINFO            |
+| `representative`        | 有報                            |
+| `corporate_number`      | gBizINFO（13 桁、UNIQUE）       |
+| `capital_stock_yen`     | gBizINFO                        |
+| `fiscal_year_end_month` | 有報（1〜12）                   |
+| `logo_url` / `cover_image_url` | 任意                     |
+| `created_at` / `updated_at`（トリガで自動更新） |             |
 
-| カラム      | 型   | 説明                     |
-| ----------- | ---- | ------------------------ |
-| code        | text | PK                       |
-| name        | text | 業界名                   |
-| parent_code | text | 大分類コード（nullable） |
+#### 3.2.3 `industries` — 業界マスタ
 
-#### `financial_metrics` — 年度別の指標（整形済み）
+東証 33 業種ベース。`code` PK / `name` / `parent_code`（自己参照）。
 
-| カラム                          | 型          | 説明                           |
-| ------------------------------- | ----------- | ------------------------------ |
-| id                              | uuid        | PK                             |
-| company_id                      | uuid        | FK → companies                 |
-| fiscal_year                     | int         | 事業年度                       |
-| average_annual_salary           | int         | 平均年収（円）                 |
-| average_age                     | numeric     | 平均年齢                       |
-| average_tenure_years            | numeric     | 平均勤続年数                   |
-| employee_count                  | int         | 従業員数                       |
-| female_manager_ratio            | numeric     | 女性管理職比率（％、nullable） |
-| average_overtime_hours          | numeric     | 平均残業時間（nullable）       |
-| revenue                         | bigint      | 売上高（円）                   |
-| operating_income                | bigint      | 営業利益（円）                 |
-| net_income                      | bigint      | 当期純利益（円）               |
-| created_at                      | timestamptz |                                |
-| UNIQUE(company_id, fiscal_year) |             |                                |
+#### 3.2.4 `financial_metrics` — 年度別の整形済み指標
 
-#### `industry_averages` — 業界平均（事前集計、マテビュー化推奨）
+`(company_id, fiscal_year)` UNIQUE。`average_annual_salary` / `average_age` / `average_tenure_years` / `employee_count` / `female_manager_ratio` / `average_overtime_hours` / `revenue` / `operating_income` / `ordinary_income` / `net_income` / `doc_id` / `submitted_at`。
 
-| カラム                                  | 型      | 説明           |
-| --------------------------------------- | ------- | -------------- |
-| industry_code                           | text    | FK             |
-| fiscal_year                             | int     |                |
-| avg_annual_salary                       | int     |                |
-| avg_tenure_years                        | numeric |                |
-| avg_employee_count                      | int     |                |
-| avg_female_manager_ratio                | numeric |                |
-| avg_overtime_hours                      | numeric |                |
-| sample_size                             | int     | 集計対象企業数 |
-| PRIMARY KEY(industry_code, fiscal_year) |         |                |
+`net_income` だけでなく **経常利益 (`ordinary_income`) も持つ**。企業詳細ページでは売上・営業利益・経常利益の 3 系列をグラフ化している。
 
-### 3.3 ETLバッチの責務
+#### 3.2.5 `industry_averages` — 業界平均
 
-1. EDINET API から日次で新着書類リストを取得
-2. 該当書類の XBRL ZIP をダウンロード
-3. パース → `raw_xbrl_documents` に格納
-4. 必要項目を抽出 → `financial_metrics` に upsert
-5. 全件取り込み完了後、`industry_averages` を再集計
+`(industry_code, fiscal_year)` PK。`avg_annual_salary / avg_tenure_years / avg_employee_count / avg_female_manager_ratio / avg_overtime_hours / sample_size`。`financial_metrics` から再集計（`scripts/etl/04-compute-industry-averages.ts`）。
 
-> **MVPでは過去3〜5年分を一括バックフィル**してから日次バッチに切り替える運用を想定。
+#### 3.2.6 `mhlw_company_data` — 厚労省 女性活躍 DB
+
+会社単位 1 行。残業・育休取得率・有給取得率・女性係長/管理職/役員比率・男女賃金差・各種認定（くるみん／えるぼし／ユースエール／なでしこ）・諸制度（フレックス／テレワーク等）・データ集計範囲。詳細は `lib/data/mhlw-types.ts` の `MhlwCompanyData` 型を参照。
+
+#### 3.2.7 会員系テーブル
+
+- `profiles`（auth 拡張）— `id`(=auth.users.id), `email` 等。`handle_new_user()` トリガが新規登録時に作成。
+- `user_profiles` — ニックネーム・生まれ年・性別・都道府県・キャリアステータス・年収帯。RLS は本人のみ全権。
+- `user_favorites` — `(user_id, company_id)` PK。`/mypage/favorites` のソースで、企業ヒーロー右上のハートと連動。RLS は本人のみ全権。
+
+### 3.3 ETL の責務
+
+`scripts/etl/` 配下のローカル実行スクリプトで構成（管理画面からは起動しない）。`SUPABASE_SERVICE_ROLE_KEY` を利用するため Vercel 環境では実行しない。
+
+| 番号 | スクリプト | 役割 |
+| --- | --- | --- |
+| 01 | `01-fetch-april-companies.ts` | 期間内に有報を提出した会社一覧を EDINET から取得し、`industry name → code` を解決して JSON へ吐く |
+| 02 | `02-fetch-historical-docs.ts` | 各社の過去 5 年分の有報メタを EDINET から取得し JSON 化 |
+| 03 | `03-load-companies-and-xbrl.ts` | XBRL CSV をダウンロード→解析→`companies` / `financial_metrics` / `raw_xbrl_documents` に upsert |
+| 04 | `04-compute-industry-averages.ts` | `industry_averages` を再集計 |
+| 05 | `05-import-mhlw.ts` | 厚労省 CSV を取り込み、`mhlw_company_data` に upsert + 残業/女性管理職比率の欠損補完 + `corporate_number` を埋める |
+| 06 | `06-generate-summaries.ts` | 最新有報の事業内容テキストを抽出し、OpenAI で `companies.summary` を生成 |
+| 07 | `07-import-gbizinfo.ts` | gBizINFO API から HP・設立日・資本金・代表者・法人番号を取得して `companies` に上書き |
+
+並列実行ヘルパ（`fetch-quarterly-parallel.ts` / `generate-summaries-quarterly-parallel.ts` 等）と失敗リトライ用スクリプト（`retry-failures-2025q4.ts` 等）も備える。
+
+> 将来的にはスケジューラ（GitHub Actions / Supabase pg_cron）で 04, 06, 07 を定期実行に寄せる方針。`data_ingestion_jobs` テーブルや管理画面からのジョブ起動 UI は **意図的に廃止** している（個人運用で過剰なため）。
 
 ---
 
-## 4. ページ構成
+## 4. 認可モデル
 
-### 4.1 サイトマップ
+### 4.1 ロール
+
+- **匿名ユーザー** — 公開ページ全般を閲覧可能。役職別年収・厚労省データの数値は HTML に出さない（後述のゲート参照）。
+- **会員（ログイン済み）** — 上記 + ゲートされた数値の閲覧、お気に入り、マイページ。
+- **管理者** — 会員の上位互換。`ADMIN_EMAILS` に含まれる email のユーザーのみ。`/admin` 配下にアクセス可能。
+
+### 4.2 認証
+
+- Supabase Auth（メール/パスワード + Google OAuth）。
+- `middleware.ts` がほぼ全パスでセッションを更新する（静的ファイルと一部画像のみ除外）。
+- 会員 UI: `/auth/sign-in` `/auth/sign-up` `/auth/verify-email` `/auth/forgot-password` `/auth/reset-password`、コールバックは `/auth/callback` `/auth/confirm`。
+
+### 4.3 管理者判定
+
+`lib/auth/is-admin.ts`:
+
+- DB ベースの `admin_users` テーブルは使わない。
+- `process.env.ADMIN_EMAILS` を `,` 分割し trim + lowercase で比較。
+- `isCurrentUserAdmin()` は React の `cache()` でリクエスト内 1 回に絞る。
+- 未認証で `/admin` を開くと `getCurrentUser()` 由来で `/auth/sign-in?next=/admin` へリダイレクト。
+- 認証済みでも非管理者なら `notFound()` を返し **404 で存在自体を隠す**。
+
+### 4.4 ゲート（数値の段階的開示）
+
+役職別年収と厚労省データは「あるかどうか」だけ HTML に出し、**実数値は会員専用 API で配信** する：
+
+- `app/api/companies/[edinetCode]/position-estimate/route.ts` — 役職別年収（`lib/data/position-salary.ts` の `estimatePositionSalaries`）
+- `app/api/companies/[edinetCode]/mhlw/route.ts` — 厚労省データ
+- 画面側のラッパーは `components/GatedPositionSalary.tsx` / `components/GatedMhlwSection.tsx`
+
+---
+
+## 5. ページ構成
+
+### 5.1 サイトマップ
 
 ```
-/                              トップページ
-/search                        検索結果ページ
-/companies/[edinetCode]        企業詳細ページ ★メインコンテンツ
-/industries                    業界一覧ページ
-/industries/[code]             業界詳細ページ
+公開ページ
+/                              トップ
+/search                        検索結果
+/companies/[edinetCode]        企業詳細 ★メインコンテンツ
+/industries                    業界一覧
 /about                         サービスについて
-/data-source                   データ出典・更新頻度の説明
+/data-source                   データ出典・更新頻度
+/privacy-policy                プライバシーポリシー
+/terms-of-service              利用規約
 
-# 管理画面（一般ユーザーから見えない）
-/admin                         管理画面ログイン
-/admin/dashboard               管理ダッシュボード
-/admin/jobs                    データ取得ジョブ管理
-/admin/jobs/new                新規データ取得ジョブ作成
-/admin/companies               取り込み済み企業一覧
-/admin/companies/[id]          企業データ詳細・概要再生成
+会員系（要ログイン、middleware で誘導）
+/mypage                        プロフィール表示・編集の起点
+/mypage/favorites              お気に入り企業一覧
+/mypage/settings               メアド・パスワード変更・退会
+
+認証フロー
+/auth/sign-in / sign-up / verify-email / forgot-password / reset-password
+/auth/callback / confirm       OAuth・メール確認
+
+管理画面（リンクなし。/admin を直打ち + ADMIN_EMAILS）
+/admin                         ダッシュボード
+/admin/users                   ユーザー一覧・削除
+
+API
+/api/search/suggest                                インクリメンタル検索
+/api/companies/[edinetCode]/position-estimate      役職別年収（要ログイン）
+/api/companies/[edinetCode]/mhlw                   厚労省データ（要ログイン）
 ```
 
-MVPでは `/`, `/search`, `/companies/[edinetCode]` の3ページを最優先で実装し、`/industries` 系と説明ページは順次追加する。
+`/industries/[code]`（業界詳細）は **未実装**。`/industries` は業界の一覧と各業界の上位企業のショートカットのみ。
 
-### 4.2 各ページの設計
+### 5.2 トップ `/`
 
----
+`app/page.tsx`。`revalidate = 3600` の ISR。
 
-#### ① トップページ `/`
+- ヒーロー：キャッチコピー + 大型検索ボックス + サービスのバレットポイント
+- 使い方カード 3 枚（転職比較 / 企業研究 / 相場感）
+- 直近で更新された企業のマーキー
+- ランキングタブ（年収 / 勤続年数 / 従業員数 / 売上高 / 直近更新）
+- 業界から探す
+- 年収分布のヒストグラム
 
-**目的**: ユーザーに「何ができるサービスか」を3秒で理解させ、検索アクションへ誘導する。
+データは `getRecentCompanies` / `searchCompaniesPaged` / `getHomeStats` / `getSalaryDistribution` を `Promise.all` で並列取得。
 
-**レイアウト（上から順）**:
+### 5.3 検索結果 `/search`
 
-1. **ヒーローセクション**
-   - キャッチコピー：「有価証券報告書から見る、企業のリアルな数字」
-   - 中央に巨大な検索ボックス（企業名 / 証券コードでインクリメンタルサーチ）
-   - サブテキスト：「データはすべて金融庁EDINETの一次情報。広告なし・無料」
-2. **使い方セクション**（3ステップ）
-   - 検索 → 企業ページ閲覧 → 業界平均と比較
-3. **最近更新された企業 / 注目企業**
-   - 企業カード×6〜8（ロゴ・企業名・平均年収・業界）
-4. **業界から探す**
-   - 主要業界へのリンク（製造業、情報通信、金融、商社 等）
-5. **フッター**（データ出典・運営者情報）
+`searchParams` ベースで Server Component から Supabase に直接クエリ。クエリ・業界・年収レンジ・上場市場・並び順で絞り込み。フィルタはモーダル（`SearchFilterModal.tsx`）で SP/PC 共通 UI。
 
-**Next.js実装メモ**:
+### 5.4 企業詳細 `/companies/[edinetCode]` ★最重要
 
-- 検索ボックスは Server Component + Client Component の組み合わせ
-- インクリメンタルサーチは Supabase の `ilike` または pg_trgm を利用
-- 「最近更新された企業」は ISR（revalidate: 3600）で十分
+`app/companies/[edinetCode]/page.tsx`。Header の `<UserMenu />` が `cookies()` を読むため **`dynamic = "force-dynamic"`**。SEO はビルド時 `app/sitemap.ts` が全 EDINET コードを列挙するのでクロール経路は維持される。
 
----
+セクション構成（上から）:
 
-#### ② 検索結果ページ `/search?q=...`
+1. **`<CompanyHero />`** — ロゴ・社名・業界タグ・上場区分・本社・公式 HP・業界内ランキング・お気に入り（`<FavoriteButton />`）。年収業界平均比 / 前年比もここで出す。
+2. **企業概要（LLM 生成）** — `companies.summary` をそのまま `whitespace-pre-line` で表示。末尾に「※{年度}年度提出の有価証券報告書から自動生成」と注記。`null` のときはセクション自体を非表示。
+3. **働き方の主要指標（5 枚カード）** — 平均勤続年数 / 従業員数 / 平均年齢 / 女性管理職比率 / 平均残業時間（月）。`<MetricCard />` で業界平均比と前年比を色 + 矢印で表現。任意開示項目は `unavailableLabel` で「データなし」を明示。
+4. **平均年収の推移** — `<SalaryTrendChart />`（visx）。会社実績 vs 業界平均（点線）。`<details>` で生データテーブルも併記（SR 対応）。
+5. **業績の推移** — `<EarningsTrendChart />`。売上・営業利益・経常利益の 3 系列。
+6. **役職別年収（ゲート）** — データがあれば `<GatedPositionSalary />` を描画。HTML には実数値を含めず、ログイン後 API から取得。算出ロジックは `lib/data/position-salary.ts`（賃金構造基本統計調査の役職別賃金比×会社平均年齢→非役職者推定→各役職の年収）。
+7. **厚労省データ（ゲート）** — `mhlw_company_data` がある会社のみ `<GatedMhlwSection />` を描画。本体 `<MhlwSection />` は残業時間・育休取得率・有給取得率・女性比率・男女賃金差・認定マーク・諸制度を表示。
+8. **企業基本情報テーブル** — `<CompanyBasicInfoTable />`。代表者・法人番号・資本金・設立日・決算月・事業内容（有報抜粋）等。
+9. **同業他社** — 同 `industry_code` の他社を `getCompaniesByIndustry` で 5 件取得し `<CompanyCard variant="compact" />` で並べる。
+10. **データ出典** — 提出先（EDINET）・doc_id・提出年月・EDINET の該当書類への外部リンク。
 
-**目的**: 検索キーワードに該当する企業をリスト表示し、企業詳細ページへ誘導する。
+### 5.5 マイページ `/mypage` 系
 
-**レイアウト**:
+- `/mypage` — ニックネーム・基本属性（生まれ年・性別・都道府県・キャリア・年収帯）の表示と編集モーダル（`<EditProfileButton />` → `<UserProfileForm />`）。プロフィール完了バッジあり。
+- `/mypage/favorites` — お気に入り一覧。`<FavoriteButton />` で個別解除可能。
+- `/mypage/settings` — メアド変更（要再認証）・パスワード変更・退会（`<DeleteAccountForm />` で email 再入力を強制）。
 
-- 上部：検索バー（再検索可能）
-- 左カラム（PC）/ ドロワー（SP）：絞り込みフィルタ
-  - 業界（チェックボックス）
-  - 平均年収レンジ（スライダー）
-  - 平均勤続年数レンジ
-  - 上場市場（プライム/スタンダード/グロース）
-- メインカラム：企業カードのリスト
-  - 1カードあたり：企業名 / 業界 / 平均年収 / 平均勤続年数 / 従業員数 / 業界平均比（+12% など）
-  - ソート：年収順 / 勤続年数順 / 従業員数順 / 売上高順
+`app/mypage/layout.tsx` でヘッダ・フッタ・サイドナビをまとめている。
 
-**Next.js実装メモ**:
+### 5.6 管理画面 `/admin` 系
 
-- Server Component でクエリパラメータを読み、Supabase へ直接クエリ
-- ページネーションは `searchParams` ベース（`?q=...&page=2`）
-- 検索数が多い場合は将来的に Algolia / Meilisearch 検討
+- `/admin` — ダッシュボード。会員数・直近 7 日新規 / 24h アクティブ / 30 日アクティブ・メール認証率・プロフィール完了率・登録推移（30 日のスパークライン）・企業データ網羅率（法人番号・設立日・公式 HP・資本金・代表者・AI 概要・平均年収・勤続年数）・お気に入りトップ 10・直近更新企業一覧・ETL ヘルス（最新取込・直近 7 日パース件数・直近 30 日エラー件数）。
+- `/admin/users` — auth.users + user_profiles の集約一覧。検索・フィルタ・1 件ごとの削除（`<DeleteUserDialog />` で email 再入力確認、`adminDeleteUser` Server Action がサーバ側でも一致を再検証して `auth.admin.deleteUser` を呼ぶ）。
+- `app/admin/layout.tsx` — Header（検索ボックス非表示）+ サイドナビ + Footer。`metadata.robots = { index: false, follow: false }` + `referrer: same-origin` を明示。
+- ジョブ管理 UI / 企業詳細 UI / 概要再生成 UI は **持たない**。ETL はすべてローカル CLI から手動で叩く。
 
----
+### 5.7 共通コンポーネント
 
-#### ③ 企業詳細ページ `/companies/[edinetCode]` ★最重要
+| コンポーネント                         | 用途                                                               |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| `<Header />`                           | 全ページ共通。ロゴ + 検索 + `<UserMenu />`                          |
+| `<Footer />`                           | データ出典・運営情報・利用規約・プライバシーポリシー                |
+| `<SearchBox />` / `<SearchFilterModal />` | インクリメンタル検索とフィルタ                                  |
+| `<CompanyCard />` / `<CompanyHero />`  | 企業カード（一覧 / 関連企業）と企業詳細ヒーロー                    |
+| `<MetricCard />`                       | KPI カード（数値 + 業界平均比 + YoY）                              |
+| `<HomeRankingTabs />` / `<MarqueeRow />` | トップのランキング切替・直近更新マーキー                          |
+| `<FavoriteButton />` / `<Toaster />`   | お気に入り操作と toast                                              |
+| `<MhlwSection />` / `<GatedMhlwSection />` | 厚労省データの表示とゲート                                     |
+| `<PositionSalaryEstimate />` / `<GatedPositionSalary />` | 役職別年収とゲート                              |
+| `<CompanyBasicInfoTable />`            | 企業基本情報の dl/table                                            |
+| `<IndustryBadge />`                    | 業界タグ                                                            |
+| `components/admin/*`                   | `StatCard` / `ProgressBar` / `SparkBarChart` / `UserTable`         |
+| `components/auth/*`                    | サインイン・サインアップ・パスワード/メール変更・Google OAuth・退会・ユーザーメニュー |
+| `components/profile/*`                 | プロフィール属性編集モーダル                                        |
+| `components/charts/*`                  | `SalaryTrendChart` / `EarningsTrendChart`（visx）                  |
 
-**目的**: 「この企業の年収・働き方・業績は、業界平均と比べてどうなのか」を一目で理解させる。
+### 5.8 グラフ実装方針（visx）
 
-**レイアウト構成（上から順）**:
+採用パッケージ: `@visx/scale axis shape group responsive tooltip grid curve event`。
 
-##### セクション1: ヘッダー（ファーストビュー）
-
-- 左：企業ロゴ + 企業名 + 業界タグ + 上場市場タグ
-- 右：「業界内ランキング X位 / Y社」のバッジ
-- サブ：証券コード、本社所在地、設立年、Webサイトリンク
-
-##### セクション1.5: 企業概要（四季報スタイル）
-
-- 最新の有報を元にLLMが生成した、200〜300字程度の客観的なサマリテキスト
-- 自然な一段落で記述する（見出しや箇条書きは使わない）
-- 「優良」「ブラック」等の主観表現は禁止し、事実ベースの記述のみ
-- 末尾に「※本概要は{年度}年提出の有価証券報告書を元に自動生成」と注記
-
-##### セクション2: サマリーカード（4枚並べる）
-
-横並び4枚のKPIカードで瞬間的に主要指標を見せる：
-| カード | 表示内容 |
-|---|---|
-| 平均年収 | 大きな数字 + 業界平均との差（+12% など）+ 前年比 |
-| 平均勤続年数 | 大きな数字 + 業界平均との差 |
-| 従業員数 | 大きな数字 + 前年比増減 |
-| 平均年齢 | 大きな数字 + 業界平均との差 |
-
-> **設計上のポイント**: 業界平均との差を「色（緑/赤）+ 矢印」で視覚化。転職検討者が一番見たい情報なので最上部に配置。
-
-##### セクション3: 年収の推移グラフ
-
-- 折れ線グラフ：直近5年の平均年収推移
-- 同じグラフ上に業界平均ラインを重ねて表示（点線）
-- ホバーで具体的な数値表示
-
-##### セクション4: 働き方の指標
-
-- 女性管理職比率（円グラフ + 業界平均との比較）
-- 平均残業時間（棒グラフ + 業界平均との比較）
-- 有給取得率（データがあれば）
-- ※データが存在しない指標は「データなし」と明示
-
-##### セクション5: 業績ハイライト
-
-- 売上高・営業利益・当期純利益の推移グラフ（直近5年）
-- 業績は「健全性の参考情報」として簡潔に表示（深い財務分析はターゲット外）
-
-##### セクション6: 同業他社との比較
-
-- 同じ業界内の上位5〜10社を横並びの比較テーブルで表示
-- 行：企業名、列：平均年収・勤続年数・従業員数
-- 各企業名はクリックで詳細ページへ遷移
-
-##### セクション7: データ出典
-
-- 「このデータは X年X月提出の有価証券報告書（EDINET）から取得」
-- EDINETの該当書類への外部リンク
-- 最終更新日
-
-**Next.js実装メモ**:
-
-- ページ全体は Server Component で SSG/ISR（revalidate: 86400）
-- グラフ部分のみ Client Component（visx）
-- `generateStaticParams` で主要企業（数百社）はビルド時生成、それ以外はオンデマンドISR
-- メタデータは `generateMetadata` で動的生成（OGP対応必須）
+- すべて `<ParentSize>` でラップしてレスポンシブ化、Client Component で動かす。
+- `components/charts/` 配下にラッパーを置き、ページからは props で呼ぶだけ。visx の詳細は閉じ込める。
+- ツールチップは `useTooltip` + `<TooltipWithBounds>` + `localPoint`。
+- アクセシビリティ確保のため、生データの `<table>` を `<details>` で併記する（年収推移セクションを参照）。
 
 ---
 
-#### ④ 業界詳細ページ `/industries/[code]`（MVP後）
+## 6. デザイン方針
 
-**目的**: 業界全体の傾向を把握し、その業界内の企業を比較する。
-
-**レイアウト**:
-
-- 業界名 + 業界の説明文
-- 業界平均サマリー（年収・勤続年数・従業員数）
-- 業界内の年収ランキング（TOP30）
-- 業界の年収分布ヒストグラム
-
----
-
-### 4.3 共通コンポーネント
-
-| コンポーネント        | 用途                                                    |
-| --------------------- | ------------------------------------------------------- |
-| `<Header />`          | サイト全ページ共通。ロゴ + 検索ボックス（コンパクト版） |
-| `<Footer />`          | データ出典・運営者情報・お問い合わせ                    |
-| `<CompanyCard />`     | 企業カード（検索結果・トップページ・関連企業で再利用）  |
-| `<MetricCard />`      | KPIカード（数値 + 業界平均比）                          |
-| `<ComparisonChart />` | 折れ線グラフ + 業界平均ライン                           |
-| `<IndustryBadge />`   | 業界タグ                                                |
-| `<SearchBox />`       | インクリメンタルサーチ                                  |
-
-### 4.4 グラフ実装方針（visx）
-
-visx は Airbnb 製の低レベルチャートライブラリで、Recharts のような「すぐ使える完成品コンポーネント」ではなく、D3 のスケール・軸・図形プリミティブを React として扱うための部品集である。柔軟性と引き換えに記述量が増えるため、以下の方針で運用する。
-
-**採用する @visx パッケージ（推奨セット）**
-
-- `@visx/scale` — スケール定義（scaleLinear / scaleTime / scaleBand）
-- `@visx/axis` — 軸描画
-- `@visx/shape` — 折れ線・棒・エリアの図形
-- `@visx/group` — SVGグループ
-- `@visx/responsive` — `<ParentSize>` でレスポンシブ対応
-- `@visx/tooltip` — ホバー時のツールチップ
-- `@visx/grid` — 罫線
-- `@visx/curve` — 折れ線の補間関数
-
-**実装パターン**
-
-- すべてのグラフは `<ParentSize>` でラップしてレスポンシブ化
-- 共通の `useChartTheme()` フックで色・フォント・余白を一元管理（業界平均ラインは点線+グレーで統一）
-- Tooltip は `useTooltip` + `<TooltipWithBounds>` の組み合わせをテンプレート化
-
-**チャート用ラッパーコンポーネント設計**
-visx を直接呼ぶコードがページに散らばらないよう、`components/charts/` 配下にラッパーを切る：
-
-| ラッパー                    | 用途                                          |
-| --------------------------- | --------------------------------------------- |
-| `<SalaryTrendChart />`      | 年収推移 + 業界平均ラインの折れ線（企業詳細） |
-| `<ComparisonBarChart />`    | 自社 vs 業界平均の棒グラフ（残業時間等）      |
-| `<DistributionHistogram />` | 業界内の分布ヒストグラム（業界詳細）          |
-| `<DonutChart />`            | 女性管理職比率などの構成比                    |
-
-ページ側からはこれらのラッパーをpropsで呼ぶだけで済むようにし、visx の詳細はラッパー内に閉じ込める。
-
-**注意点**
-
-- visx は SSR 時に DOM 計測ができないため、`<ParentSize>` を使ったコンポーネントは必ず `'use client'` 配下に置く
-- ツールチップの位置計算は `localPoint`（@visx/event）を使う
-- アクセシビリティ確保のため、各グラフには `<title>` と `aria-label` を付与し、生データを `<table>` で併記する（SR対応）
-
----
-
-## 5. デザイン方針
-
-### 5.1 トーン & マナー
+### 6.1 トーン & マナー
 
 - **信頼感重視**: 一次情報を扱うサービスなので、誇張表現は使わない
 - **数字を主役に**: 装飾は最小限、数値の視認性を最優先
 - **客観中立**: 「ホワイト企業」「ブラック企業」のような主観評価語は使わない
 
-### 5.2 カラーパレット（推奨）
+### 6.2 カラー
 
-- ベース：白〜薄いグレー（`#FAFAFA`）
-- メイン：濃紺（`#1E3A8A` 程度）— 信頼感・公的な印象
-- アクセント：エメラルド（業界平均より良い）/ アンバー（業界平均より低い）
-- テキスト：`#111827`（本文）/ `#6B7280`（サブ）
+`tailwind.config.ts` でブランド色 / surface / ink / positive / negative の役割色を定義。企業ページのアクセントは `lib/data/brand-color.ts` の `brandColorFor(industryCode)` で業界ごとに決定する（`<CompanyHero />` のグラデーションや `<EarningsTrendChart />` の主要色に流用）。
 
-### 5.3 タイポグラフィ
+### 6.3 タイポ
 
-- 日本語：Noto Sans JP
-- 数字：Inter または system-ui（数字の視認性が高いフォント）
-- 数値表示は **tabular-nums** を必ず指定（桁が揃って見やすい）
+- 日本語: Noto Sans JP
+- 数値: `font-numeric` クラスで tabular-nums を適用
 
-### 5.4 レスポンシブ
+### 6.4 レスポンシブ
 
-- モバイルファースト（転職検討者は通勤中などのスマホ閲覧が多い想定）
-- 企業詳細ページの4枚KPIカードは SP では2×2グリッドに
+- モバイルファースト
+- 企業詳細ページの主要指標カードは PC で 5 列、SP では 1〜2 列
 
 ---
 
-## 6. SEO・パフォーマンス方針
+## 7. SEO・パフォーマンス
 
-- 企業詳細ページは **SSG + ISR** で高速化（Vercel のキャッシュを最大活用）
-- 構造化データ（JSON-LD）で `Organization` スキーマを埋め込む
-- サイトマップは `/sitemap.xml` を自動生成（全企業ページを含める）
-- ページタイトル例：「{企業名}の平均年収・勤続年数・従業員数 | {サービス名}」
-- Lighthouse スコア 90+ を目標
-
----
-
-## 7. 管理画面（Admin）
-
-### 7.1 設計方針
-
-データ取得・概要生成・取り込み済み企業の管理を行う**運営者専用のバックオフィス画面**。一般ユーザーからは存在を悟られないよう以下の方針とする：
-
-- ナビゲーションやフッターから `/admin` へのリンクを**一切表示しない**（URL直打ちでのみアクセス可能）
-- `robots.txt` で `/admin` 配下を `Disallow`
-- サイトマップに含めない
-- 認証されていない状態で `/admin` 配下にアクセスした場合、一律 `/admin` のログイン画面を表示
-
-### 7.2 認証方式
-
-- **Supabase Auth のメール + パスワード認証**を使用
-- ユーザーは事前にSupabase管理コンソールから手動で発行する（公開サインアップ画面は作らない）
-- ログイン後、`admin_users` テーブルに登録済みのメールアドレスかをサーバー側で再検証
-- セッションは middleware (`middleware.ts`) で `/admin/*` 全パスをガード
-- ログイン失敗時はジェネリックなエラーメッセージのみ表示（「メールが間違っています」等の存在ヒントは出さない）
-
-### 7.3 admin_users テーブル
-
-| カラム     | 型          | 説明                               |
-| ---------- | ----------- | ---------------------------------- |
-| id         | uuid        | PK（Supabase Authのuser idと一致） |
-| email      | text        | unique                             |
-| role       | text        | `super_admin` / `editor`           |
-| created_at | timestamptz |                                    |
-
-### 7.4 管理画面の構成
-
-#### `/admin` — ログイン画面
-
-- メールアドレス + パスワード入力のみ
-- 「サービスについて」等の余計な情報は一切表示せず、ロゴと入力フォームのみのシンプル画面
-
-#### `/admin/dashboard` — ダッシュボード
-
-- 取り込み済み企業数 / 最新の取り込み日時
-- 直近のジョブ実行状況（成功・失敗件数）
-- 概要未生成の企業数
-
-#### `/admin/jobs` — データ取得ジョブ管理
-
-- 過去のジョブ実行履歴一覧（実行日時、対象期間、対象企業数、ステータス、ログ）
-- 各ジョブの詳細表示（成功/失敗の内訳、エラーメッセージ）
-
-#### `/admin/jobs/new` — 新規データ取得ジョブ作成
-
-- **取得対象期間を指定**（例: 2026-04-01 〜 2026-04-30）
-- 実行ボタン押下で後述の「データ取得ロジック」を起動
-- 実行は非同期（バックグラウンドジョブとして登録）
-
-#### `/admin/companies` — 取り込み済み企業一覧
-
-- 企業名・EDINETコード・最終取得日・概要生成状態の一覧
-- 概要を再生成するアクション
-- 個別企業の手動再取り込みアクション
-
-#### `/admin/companies/[id]` — 企業データ詳細
-
-- その企業の全年度データを表形式で表示
-- 概要の手動編集 / LLM再生成ボタン
-- 元XBRLへのリンク
-
-### 7.5 ジョブテーブル設計
-
-#### `data_ingestion_jobs` — データ取得ジョブ管理
-
-| カラム              | 型          | 説明                                                          |
-| ------------------- | ----------- | ------------------------------------------------------------- |
-| id                  | uuid        | PK                                                            |
-| job_type            | text        | `monthly_ingestion` / `manual_retry` / `summary_regeneration` |
-| target_period_start | date        | 対象期間開始                                                  |
-| target_period_end   | date        | 対象期間終了                                                  |
-| status              | text        | `pending` / `running` / `completed` / `failed`                |
-| total_companies     | int         | 対象企業数                                                    |
-| processed_count     | int         | 処理済み件数                                                  |
-| skipped_count       | int         | スキップ件数（重複等）                                        |
-| error_count         | int         | エラー件数                                                    |
-| log                 | jsonb       | 実行ログ                                                      |
-| started_at          | timestamptz |                                                               |
-| completed_at        | timestamptz |                                                               |
-| created_by          | uuid        | FK → admin_users                                              |
+- `app/sitemap.ts` で全 EDINET コードを列挙
+- `app/robots.ts` で `/admin` `/mypage` `/auth` 配下は `Disallow`
+- 企業詳細は `dynamic = "force-dynamic"`（cookies を使うため）。トップは ISR 1 時間。
+- `generateMetadata` でタイトル・description を動的生成
+- Vercel Analytics で計測
 
 ---
 
-## 8. データ取得ロジック
+## 8. 企業概要の自動生成
 
-### 8.1 取得対象の決定方針
+### 8.1 方針
 
-#### 初期開発フェーズ（最初のリリース）
+四季報の「会社概要」のように、**第三者目線で客観的にまとめた 200〜300 字程度のテキスト**を有報から自動生成し、企業詳細ページに表示する。
 
-- **対象**: 「指定期間内に有報を提出した企業」のみを対象とする
-- **最初の実行**: **4月に有報を提出した会社**を対象とする（多くの3月決算企業が4月に提出するため、上場企業の主要部分を一度にカバーできる）
-- 対象期間は管理画面 `/admin/jobs/new` から自由に指定可能
+### 8.2 ソースとモデル
 
-> **背景補足**: 日本の上場企業の約7割が3月決算であり、有報の提出期限は事業年度終了後3ヶ月以内（金商法）。3月決算企業は6月末までに提出する必要があるが、早い企業は4〜5月に提出する。最初は提出が出揃いやすい4月分を対象にすることで、効率的にデータベースを構築できる。
+- 入力テキスト: 有報 XBRL の以下フィールド（`scripts/etl/06-generate-summaries.ts`）
+  - `jpcrp_cor:DescriptionOfBusinessTextBlock`
+  - `jpcrp_cor:CompanyHistoryTextBlock`
+  - `jpcrp_cor:BusinessPolicyBusinessEnvironmentIssuesToAddressEtcTextBlock`
+  - context は `FilingDateInstant` を優先、無ければ `CurrentYearDuration`
+- モデル: OpenAI（既定 `gpt-4o-mini`、`OPENAI_MODEL` env で切替）
+- 出力先: `companies.summary` / `summary_generated_at` / `summary_source_doc_id`
 
-### 8.2 取得処理のフロー
+### 8.3 文体ガイドライン
 
-```
-[管理者が期間を指定して実行]
-  ↓
-[Step 1] EDINET書類一覧APIで指定期間内の提出書類を取得
-  ↓
-[Step 2] 有価証券報告書のみに絞り込み
-        (ordinanceCode=010 かつ formCode=030000)
-  ↓
-[Step 3] ヒットした企業ごとに companies テーブルを照会
-  ↓
-[Step 4] 重複チェック
-  ├─ 該当企業のデータがDBにない場合
-  │   → 過去5年分の有報をすべて取得して取り込む
-  │
-  └─ 該当企業のデータがDBに既にある場合
-      → 最新の有報のみ取得して更新（既存の過去データは保持）
-  ↓
-[Step 5] XBRLパース → financial_metrics に upsert
-  ↓
-[Step 6] 最新有報を元に企業概要を生成（LLM）
-        → companies.summary に保存
-  ↓
-[Step 7] 業界平均（industry_averages）を再集計
-  ↓
-[完了] ジョブログを data_ingestion_jobs に記録
-```
+- 事実のみ、主観評価（優良/ブラック/有望等）禁止
+- である調・自然な一段落（見出し / 箇条書き / 区切り記号は使わない）
+- 投資勧誘・転職勧誘につながる表現禁止
+- 数値は有報のものをそのまま使用
 
-### 8.3 重複チェックの判定ロジック
+### 8.4 失敗ハンドリング
 
-```typescript
-// 疑似コード
-async function shouldFetchHistorical(edinetCode: string): Promise<{
-  mode: "full_backfill" | "latest_only";
-  existingYears: number[];
-}> {
-  const existing = await db.financial_metrics
-    .where({ company_id_via_edinet: edinetCode })
-    .select("fiscal_year");
-
-  if (existing.length === 0) {
-    // 新規企業 → 過去5年分を一括取得
-    return { mode: "full_backfill", existingYears: [] };
-  } else {
-    // 既存企業 → 最新分のみ取得
-    return {
-      mode: "latest_only",
-      existingYears: existing.map((r) => r.fiscal_year),
-    };
-  }
-}
-```
-
-### 8.4 過去5年分取得の実装注意点
-
-- EDINET APIは過去5年分のみ保持（5年超のデータは取得不能）
-- 各企業のEDINETコードを使い、`docTypeCode=120`（有価証券報告書）でフィルタ
-- レートリミット対策として、企業間に**最低1秒の間隔**を空ける
-- 1ジョブあたりの処理件数が多い場合（数千社）、ジョブをチャンク分割して逐次実行
-- 失敗した企業は `data_ingestion_jobs.log` に記録し、後で個別リトライ可能にする
-
-### 8.5 ジョブ実行基盤
-
-- Vercel Cron Jobs（無料枠は最大10秒のため、長時間ジョブには不向き）
-- **推奨**: Supabase Edge Functions + pg_cron で実行、または GitHub Actions で定期実行
-- 大量企業の処理は**キュー方式**（`data_ingestion_jobs` を pending 状態で投入し、ワーカーが順次処理）
+生成失敗時は `summary` を `null` のまま残し、企業詳細ページではセクションごと非表示にする。再生成は CLI から `--edinet=...` で個別、または `--force` で一括再生成。
 
 ---
 
-## 9. 企業概要の自動生成
+## 9. データ取得の運用
 
-### 9.1 方針
+### 9.1 取り込みの考え方
 
-四季報の「会社概要」のように、**第三者目線で客観的にまとめた200〜300字程度のテキスト**を有価証券報告書から自動生成し、企業詳細ページに表示する。
+- **対象決定**: 期間を指定して `01-fetch-april-companies.ts` を回し、その期間に有報を提出した事業会社（`formCode=030000`）の一覧を JSON 化する。
+- **新規企業**: 過去 5 年分の有報を `02 → 03` で取り込む（EDINET の保持期間に合わせる）。
+- **既存企業**: 最新分のみ追加取り込み。過去データは保持。
+- **集計**: `04-compute-industry-averages.ts` を最後に走らせる。
 
-### 9.2 生成ソース
+### 9.2 EDINET API 利用上の注意
 
-- **入力**: 最新の有価証券報告書から以下のセクションを抽出
-  - 「事業の内容」
-  - 「経営方針、経営環境及び対処すべき課題等」
-  - 「セグメント情報」（売上構成）
-  - 主要な事業所・従業員数等の基本情報
-- **出力先**: `companies.summary`（企業概要文）
+- 利用規約とレートリミットを必ず確認（推奨：1 リクエスト/秒以下）
+- API 保持期間は過去 5 年のみ
+- フッターに「金融庁 EDINET」を明記
+- レート制限対策として企業間に最低 1 秒の sleep（`scripts/etl/lib/edinet.ts` の `sleep`）
 
-### 9.3 文体ガイドライン（プロンプトで厳守させる）
+### 9.3 データ品質
 
-**含めるべき要素**:
+- 有報の項目は企業によって粒度が違う（女性管理職比率・残業時間は任意項目）
+- パース失敗時は `null` を許容、フロント側で「データなし」表示
+- 平均年収は「臨時雇用者を除く」前提
+- 最新年度の特定フィールドが欠けているときは `lib/data/companies.ts` の `computeLatestWithFallback` で過去年度の最新非 NULL 値を埋める
 
-- 事業内容の客観的説明（何を作っている / どんなサービスを提供しているか）
-- 主力事業・売上構成
-- 業界内でのポジション（売上規模・シェア等の事実ベース）
-- 直近の事業トピック（新規事業、海外展開等の事実）
+### 9.4 法的配慮
 
-**禁止事項**:
-
-- 「優良企業」「ホワイト企業」「将来有望」等の主観的評価
-- 「狙い目」「おすすめ」等の推薦表現
-- 投資勧誘・転職勧誘につながる表現
-- ネガティブな評価表現（「業績低迷」「将来性に懸念」等）
-- 推測や憶測（「おそらく」「と思われる」）
-
-**文体**:
-
-- ですます調ではなく**である調**（四季報・新聞記事と同様の硬い文体）
-- 全体を自然な一段落でまとめる（見出し・箇条書き・記号で区切らない）
-- 1文を短く、事実を淡々と並べる
-- 数値は有報に記載のものをそのまま使用
-
-### 9.4 出力フォーマット例
-
-> 電子部品の製造販売を主力とする大手メーカーで、コンデンサ、インダクタ、通信モジュールの3事業を展開する。売上の約7割を海外市場が占め、自動車・スマートフォン向けに高いシェアを持つ。直近ではEV関連部品への投資を拡大しており、国内外で新工場の建設を進めている。
-
-### 9.5 LLMプロンプト設計（雛形）
-
-```
-あなたは四季報の編集者です。提供された有価証券報告書の抜粋から、
-企業の概要を200〜300字でまとめてください。
-
-【厳守事項】
-- 事実のみを記載し、主観的評価（優良/ブラック/有望等）は一切含めない
-- である調で書く
-- 全体を自然な一段落でまとめ、見出しや箇条書き、【】等の区切り記号は使わない
-- 投資勧誘・転職勧誘につながる表現を使わない
-- 数値は提供された有報のものをそのまま使う
-
-【入力】
-{有報からの抽出テキスト}
-
-【出力】
-（200〜300字の企業概要のみを出力。前置き不要）
-```
-
-### 9.6 生成タイミング
-
-- 新規企業の取り込み時に**自動生成**
-- 既存企業も最新有報が更新されたタイミングで**再生成**
-- 管理画面から**手動再生成**も可能（`/admin/companies/[id]` のアクション）
-- 生成失敗時は `summary` を null のままにし、フロントでは「概要を準備中です」と表示
-
-### 9.7 法的・倫理的配慮
-
-- 概要は「自動生成された参考情報」である旨を明示
-- 末尾に「※本概要は{年度}年提出の有価証券報告書を元に自動生成。投資判断の材料としては利用しないでください」と注記
-- 企業から削除依頼があった場合の対応フロー（プライバシーポリシーに記載）
+- 有報・公的統計は公開情報。ロゴは商標扱い、表示は控えめに
+- ネガティブ評価表現は使わず数値で語る
+- LLM 生成サマリには「自動生成・参考情報」の注記を必ず付ける
+- プライバシーポリシー（`/privacy-policy`）と利用規約（`/terms-of-service`）を公開
 
 ---
 
 ## 10. 開発ロードマップ
 
-### Phase 1: MVP（目標：3ヶ月）
+### 完了済み（現状）
 
-- [ ] Supabaseスキーマ構築（companies / financial_metrics / data_ingestion_jobs / admin_users 等）
-- [ ] 管理画面（/admin）の認証基盤
-- [ ] 管理画面のジョブ作成・実行UI
-- [ ] EDINET取得バッチ（指定期間ベースの取り込み + 重複判定ロジック）
-- [ ] **初回データ取り込み: 4月に有報を提出した企業を対象に過去5年分を取得**
-- [ ] 企業概要のLLM自動生成
-- [ ] トップページ
-- [ ] 検索結果ページ
-- [ ] 企業詳細ページ（企業概要セクション含む）
+- [x] Supabase スキーマ（companies / financial_metrics / industry_averages / raw_xbrl_documents / industries）
+- [x] EDINET ETL（期間指定 + 過去 5 年バックフィル）
+- [x] LLM 企業概要の自動生成
+- [x] 業界平均の集計
+- [x] gBizINFO 連携（HP・設立日・資本金・代表者・法人番号）
+- [x] 厚労省 女性活躍 DB の取り込みと `<MhlwSection />`
+- [x] 役職別年収推定（賃金構造基本統計調査）
+- [x] トップ / 検索結果 / 企業詳細
+- [x] 業界一覧
+- [x] 会員機能（サインイン・サインアップ・Google OAuth・パスワード再設定・メール変更・退会）
+- [x] プロフィール属性 + マイページ
+- [x] お気に入り（ハート + マイページ一覧）
+- [x] ゲート（役職別年収・厚労省データの数値は API 経由で会員配信）
+- [x] 管理画面（ダッシュボード + ユーザー管理）
 
-### Phase 2: 拡張（MVP後）
+### 次に着手したい
 
-- [ ] 業界詳細ページ
+- [ ] `/industries/[code]`（業界詳細・分布ヒストグラム・TOP30 ランキング）
 - [ ] 複数企業の横並び比較ページ
-- [ ] お気に入り機能（要：認証）
-- [ ] 経年変化のより詳細な可視化
+- [ ] 経年変化のより詳細な可視化（5 年超の蓄積を見越して）
+- [ ] スケジューラ化（GitHub Actions / Supabase pg_cron で 04 / 06 / 07 を自動化）
 
-### Phase 3: 将来構想
+### 将来構想
 
-- [ ] 求人媒体APIとの連携
-- [ ] 日次蓄積による経年データの拡充（運用開始から5年経過時点で実質10年分のDBへ）
+- [ ] 求人媒体 API との連携
 - [ ] 連結子会社・関連会社の情報統合
+- [ ] 通知機能（お気に入り企業の有報更新メール）
 
 ---
 
-## 11. 開発時の注意事項
-
-### 11.1 EDINET API利用上の注意
-
-- 利用規約とレートリミットを必ず確認
-- バッチ実行時は十分な間隔を空ける（推奨：1リクエスト/秒以下）
-- 取得元として「金融庁EDINET」の表記を全ページのフッターに明記
-- API保持期間は過去5年のみ（5年超のデータは取得不能）
-
-### 11.2 データ品質
-
-- 有報の項目は企業によって記載粒度が異なる（女性管理職比率は任意項目）
-- パース失敗時は `null` を許容し、フロント側で「データなし」と明示
-- 平均年収は「臨時雇用者を除く」前提なので、その注記を企業詳細ページに記載
-
-### 11.3 法的配慮
-
-- 有報は公開情報だが、企業ロゴは商標。ロゴ表示は控えめにするか、テキストのみにする
-- 「年収が低い」等のネガティブ評価表現は使わず、客観的な数値表示に徹する
-- LLM生成された企業概要には「自動生成・参考情報」の注記を必ず付ける
-- 利用規約・プライバシーポリシーを公開時までに用意
-
-### 11.4 管理画面のセキュリティ
-
-- `/admin` のリンクはサイト内のいかなる箇所にも表示しない
-- `robots.txt` と `meta robots` で `/admin` 配下を完全にインデックス除外
-- 管理画面のアクセスログを記録し、不審なアクセスを監視
-- パスワードは強力なものを設定し、可能であれば2FAを追加
-
----
-
-## 付録: ディレクトリ構成（推奨）
+## 11. ディレクトリ構成（実態）
 
 ```
 .
 ├── app/
-│   ├── (marketing)/
-│   │   ├── page.tsx                  # トップ
-│   │   └── about/page.tsx
-│   ├── search/page.tsx
-│   ├── companies/[edinetCode]/
-│   │   ├── page.tsx
-│   │   └── opengraph-image.tsx
-│   ├── industries/
-│   │   ├── page.tsx
-│   │   └── [code]/page.tsx
-│   ├── admin/                         # 管理画面（リンクなし）
-│   │   ├── page.tsx                   # ログイン
-│   │   ├── dashboard/page.tsx
-│   │   ├── jobs/
-│   │   │   ├── page.tsx
-│   │   │   ├── new/page.tsx
-│   │   │   └── [id]/page.tsx
-│   │   └── companies/
-│   │       ├── page.tsx
-│   │       └── [id]/page.tsx
-│   ├── api/
-│   │   ├── search/route.ts            # インクリメンタルサーチ用
-│   │   └── admin/
-│   │       ├── jobs/route.ts          # ジョブ作成・実行
-│   │       └── summarize/route.ts     # 概要再生成
 │   ├── layout.tsx
-│   └── middleware.ts                  # /admin/* の認証ガード
+│   ├── page.tsx                       # トップ
+│   ├── not-found.tsx
+│   ├── robots.ts / sitemap.ts
+│   ├── about/ data-source/ privacy-policy/ terms-of-service/
+│   ├── search/page.tsx
+│   ├── industries/page.tsx
+│   ├── companies/[edinetCode]/page.tsx
+│   ├── auth/
+│   │   ├── sign-in/ sign-up/ verify-email/
+│   │   ├── forgot-password/ reset-password/
+│   │   └── callback/route.ts  confirm/route.ts
+│   ├── mypage/
+│   │   ├── layout.tsx  page.tsx
+│   │   ├── favorites/page.tsx
+│   │   └── settings/page.tsx
+│   ├── admin/
+│   │   ├── layout.tsx                 # 認可ガード（ADMIN_EMAILS）+ サイドナビ
+│   │   ├── page.tsx                   # ダッシュボード
+│   │   └── users/page.tsx
+│   └── api/
+│       ├── search/suggest/route.ts
+│       └── companies/[edinetCode]/
+│           ├── mhlw/route.ts
+│           └── position-estimate/route.ts
 ├── components/
-│   ├── ui/                            # shadcn/ui
-│   ├── company/
-│   ├── search/
-│   ├── charts/                        # visxラッパー
-│   └── admin/                         # 管理画面用コンポーネント
+│   ├── Header.tsx Footer.tsx Toaster.tsx
+│   ├── SearchBox.tsx SearchFilterModal.tsx
+│   ├── CompanyCard.tsx CompanyHero.tsx CompanyBasicInfoTable.tsx
+│   ├── MetricCard.tsx IndustryBadge.tsx HomeRankingTabs.tsx MarqueeRow.tsx
+│   ├── FavoriteButton.tsx
+│   ├── MhlwSection.tsx GatedMhlwSection.tsx
+│   ├── PositionSalaryEstimate.tsx GatedPositionSalary.tsx
+│   ├── admin/  auth/  profile/  charts/
 ├── lib/
-│   ├── supabase/
-│   ├── edinet/                        # EDINET API クライアント
-│   ├── xbrl/                          # XBRLパーサ
-│   ├── llm/                           # Claude API クライアント・プロンプト
-│   └── auth/                          # 管理画面認証ロジック
-├── jobs/                              # ETLバッチ
-│   ├── ingest-by-period.ts            # 期間指定取り込み
-│   ├── generate-summary.ts            # 概要生成
-│   └── recalc-industry-averages.ts    # 業界平均再計算
-└── types/
+│   ├── utils.ts toast.ts
+│   ├── supabase/  (server / client / admin / middleware)
+│   ├── auth/      (get-user / is-admin / actions / schemas)
+│   ├── profile/   (actions / schemas / get-user-profile)
+│   ├── favorites/ (actions / get-favorites)
+│   ├── admin/     (get-admin-stats / get-admin-users / actions / data-mappers)
+│   └── data/      (companies / industry-averages / mhlw / mhlw-types /
+│                   home-stats / position-salary / brand-color)
+├── scripts/etl/
+│   ├── 01-fetch-april-companies.ts
+│   ├── 02-fetch-historical-docs.ts
+│   ├── 03-load-companies-and-xbrl.ts
+│   ├── 04-compute-industry-averages.ts
+│   ├── 05-import-mhlw.ts
+│   ├── 06-generate-summaries.ts
+│   ├── 07-import-gbizinfo.ts
+│   ├── (並列化・リトライ用ヘルパ各種)
+│   └── lib/  data/  logs/
+├── supabase/
+│   ├── config.toml
+│   ├── seed.sql
+│   └── migrations/
+├── types/index.ts
+├── middleware.ts
+├── tailwind.config.ts
+└── next.config.ts
 ```
 
 ---
 
-**このドキュメントは生きた仕様書です。実装過程で得られた知見を随時反映してください。**
+## 12. 環境変数
+
+`.env.example` を参照。実運用に必要な最低限：
+
+| 変数 | 用途 |
+| --- | --- |
+| `NEXT_PUBLIC_SITE_URL` | sitemap / robots / OG の絶対 URL |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | フロントの Supabase クライアント |
+| `SUPABASE_SERVICE_ROLE_KEY` | 管理画面サーバ処理 + ETL 用 |
+| `EDINET_API_KEY` | EDINET 取得用 |
+| `GBIZINFO_API_TOKEN` | gBizINFO 連携用 |
+| `OPENAI_API_KEY` / `OPENAI_MODEL?` | 企業概要生成 |
+| `ADMIN_EMAILS` | `/admin` を開けるメールの allowlist |
+
+---
+
+**このドキュメントは生きた仕様書です。実装を変えたらここも更新してください。**

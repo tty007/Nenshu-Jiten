@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { LogOut } from "lucide-react";
+import { LogOut, Shield } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { signOut } from "@/lib/auth/actions";
 import { getCurrentUser } from "@/lib/auth/get-user";
+import { isCurrentUserAdmin } from "@/lib/auth/is-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function MypageLayout({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/auth/sign-in?next=/mypage");
+  const showAdmin = await isCurrentUserAdmin();
   return (
     <>
       <Header showSearch={false} />
@@ -43,6 +45,15 @@ export default async function MypageLayout({
               >
                 設定
               </Link>
+              {showAdmin && (
+                <Link
+                  href="/admin"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1.5 font-semibold text-brand-700 hover:bg-brand-100"
+                >
+                  <Shield className="h-4 w-4" aria-hidden />
+                  管理画面
+                </Link>
+              )}
               <form action={signOut} className="mt-2 border-t border-surface-border pt-2">
                 <button
                   type="submit"

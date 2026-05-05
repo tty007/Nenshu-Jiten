@@ -367,6 +367,14 @@ async function main() {
     console.log("[daily] GBIZINFO_API_TOKEN 未設定のため 07 をスキップ");
   }
 
+  // 9. 当日分の daily_metrics スナップショットを記録
+  console.log("[daily] 08-snapshot-daily-metrics を実行（当日分）");
+  try {
+    await spawnChild("npx", ["tsx", "scripts/etl/08-snapshot-daily-metrics.ts"]);
+  } catch (e) {
+    console.warn("[daily] 08 失敗（継続）:", (e as Error).message);
+  }
+
   console.log("[daily] 全処理完了");
 }
 

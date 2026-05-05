@@ -32,6 +32,12 @@ export default async function MypageLayout({
                 プロフィール
               </Link>
               <Link
+                href="/mypage/favorites"
+                className="rounded-md px-2 py-1.5 text-ink hover:bg-surface-muted"
+              >
+                お気に入り
+              </Link>
+              <Link
                 href="/mypage/settings"
                 className="rounded-md px-2 py-1.5 text-ink hover:bg-surface-muted"
               >

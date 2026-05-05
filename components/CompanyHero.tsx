@@ -7,6 +7,7 @@ import {
   MapPin,
   Minus,
 } from "lucide-react";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import { IndustryBadge, MarketBadge } from "@/components/IndustryBadge";
 import { formatSalary } from "@/lib/utils";
 import type { CompanyWithLatestMetrics } from "@/types";
@@ -20,6 +21,7 @@ type Props = {
   salaryIndustryDiff: Diff;
   salaryYoY: Diff;
   industryRank: { rank: number; total: number };
+  isFavorited: boolean;
 };
 
 const toneTextClass: Record<Tone, string> = {
@@ -39,6 +41,7 @@ export function CompanyHero({
   salaryIndustryDiff,
   salaryYoY,
   industryRank,
+  isFavorited,
 }: Props) {
   const { brandColor, latest, coverImageUrl } = company;
 
@@ -72,7 +75,15 @@ export function CompanyHero({
       )}
 
       <div className="relative px-6 py-7 sm:px-10 sm:py-10">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="absolute right-4 top-4 sm:right-6 sm:top-6">
+          <FavoriteButton
+            companyId={company.id}
+            edinetCode={company.edinetCode}
+            initialIsFavorited={isFavorited}
+            variant="hero"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 pr-32 sm:pr-36">
           <IndustryBadge name={company.industryName} className="bg-white/90" />
           <MarketBadge market={company.listedMarket} className="bg-white/90" />
         </div>

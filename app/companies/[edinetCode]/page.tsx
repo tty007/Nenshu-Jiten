@@ -22,6 +22,7 @@ import {
   getIndustryAverageHistory,
 } from "@/lib/data/industry-averages";
 import { hasMhlwForCompany } from "@/lib/data/mhlw";
+import { isFavoritedByCurrentUser } from "@/lib/favorites/get-favorites";
 import {
   diffPercent,
   formatDiff,
@@ -75,6 +76,7 @@ export default async function CompanyDetailPage({
   // 女性活躍・両立支援データは存在判定だけここで行い、実値はゲート API 経由で
   // 認証ユーザーにのみ返す（HTML には数値を出さない）。
   const mhlwAvailable = await hasMhlwForCompany(company.id);
+  const isFavorited = await isFavoritedByCurrentUser(company.id);
   // 役職別年収の数値は SSR HTML に載せず、ゲート API から認証ユーザーにのみ返す。
   // ここではセクションを描画するか否かだけを判定する。
   const positionEstimateAvailable =
@@ -163,6 +165,7 @@ export default async function CompanyDetailPage({
           salaryIndustryDiff={salaryIndustryDiff}
           salaryYoY={salaryYoY}
           industryRank={peerRank}
+          isFavorited={isFavorited}
         />
 
         {company.summary && (

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toggleFavorite } from "@/lib/favorites/actions";
+import { dismissToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 type Variant = "hero" | "compact";
@@ -29,21 +30,32 @@ export function FavoriteButton({
   const [pending, startTransition] = useTransition();
 
   function onClick() {
+    const willAdd = !isFavorited;
+    const loadingId = toast.loading(
+      willAdd ? "お気に入りに追加中…" : "お気に入りから削除中…"
+    );
     startTransition(async () => {
-      const optimistic = !isFavorited;
-      setIsFavorited(optimistic);
+      setIsFavorited(willAdd);
       const res = await toggleFavorite(companyId, edinetCode);
+      dismissToast(loadingId);
       if (!res.ok) {
         // 失敗時はロールバック
-        setIsFavorited(!optimistic);
+        setIsFavorited(!willAdd);
         if (res.error === "unauth") {
+          toast.info("ログインが必要です");
           const next = returnTo ?? `/companies/${edinetCode}`;
           router.push(`/auth/sign-in?next=${encodeURIComponent(next)}`);
+        } else {
+          toast.error("保存に失敗しました。時間をおいて再度お試しください。");
         }
         return;
       }
-      // 成功時：表示を最新化（一覧などのリバリデート反映）
       setIsFavorited(res.isFavorited);
+      toast.success(
+        res.isFavorited
+          ? "お気に入りに追加しました"
+          : "お気に入りから削除しました"
+      );
       router.refresh();
     });
   }

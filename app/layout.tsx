@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP } from "next/font/google";
+import { Toaster } from "@/components/Toaster";
 import "./globals.css";
 
 const notoSansJP = Noto_Sans_JP({
@@ -35,7 +36,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja" className={`${notoSansJP.variable} ${inter.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }

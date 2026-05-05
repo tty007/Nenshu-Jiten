@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP } from "next/font/google";
+import { Suspense } from "react";
+import { Analytics } from "@vercel/analytics/next";
+import { PageViewTracker } from "@/components/PageViewTracker";
 import { Toaster } from "@/components/Toaster";
 import "./globals.css";
 
@@ -39,6 +42,10 @@ export default function RootLayout({
       <body>
         {children}
         <Toaster />
+        <Suspense fallback={null}>
+          <PageViewTracker />
+        </Suspense>
+        <Analytics />
       </body>
     </html>
   );

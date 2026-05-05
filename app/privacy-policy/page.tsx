@@ -115,7 +115,9 @@ export default function PrivacyPolicyPage() {
                 </tr>
                 <tr className="border-b border-surface-border">
                   <td className="py-2 pr-4">Vercel Inc.</td>
-                  <td className="py-2 pr-4">アプリケーションホスティング</td>
+                  <td className="py-2 pr-4">
+                    アプリケーションホスティングおよびアクセス解析（匿名集計のみ。個人を特定する情報は送信されません）
+                  </td>
                   <td className="py-2">米国</td>
                 </tr>
                 <tr className="border-b border-surface-border">

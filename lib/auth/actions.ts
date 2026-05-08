@@ -14,10 +14,23 @@ import {
   updatePasswordSchema,
 } from "./schemas";
 import { getCurrentUser } from "./get-user";
-import {
-  extractConsentFlagsFromFormData,
-  recordInitialConsents,
-} from "@/lib/profile/consent-actions";
+import { recordInitialConsents } from "@/lib/profile/consent-actions";
+import { CONSENT_TYPES, type ConsentType } from "@/lib/profile/consents";
+
+/**
+ * フォームのチェック状態を CONSENT_TYPES に揃える同期ヘルパ。
+ * "use server" ファイル間で sync export を共有できないため、ここに局所定義する。
+ */
+function extractConsentFlagsFromFormData(
+  formData: FormData
+): Partial<Record<ConsentType, boolean>> {
+  const out: Partial<Record<ConsentType, boolean>> = {};
+  for (const type of CONSENT_TYPES) {
+    const v = formData.get(`consent.${type}`);
+    out[type] = v === "on" || v === "true" || v === "1";
+  }
+  return out;
+}
 
 export type ActionResult =
   | { ok: true; message?: string; redirectTo?: string }

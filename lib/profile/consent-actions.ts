@@ -109,22 +109,5 @@ export async function recordInitialConsents(
   return { ok: true };
 }
 
-/**
- * 受け取った FormData から、CONSENT_TYPES に該当するチェック状態を抽出。
- * サインアップ・マイページ等で共通して使う。
- *
- * チェックボックスは `name="consent.<type>"` で送信する想定。
- */
-export function extractConsentFlagsFromFormData(
-  formData: FormData
-): Partial<Record<ConsentType, boolean>> {
-  const out: Partial<Record<ConsentType, boolean>> = {};
-  for (const type of CONSENT_TYPES) {
-    const v = formData.get(`consent.${type}`);
-    out[type] = v === "on" || v === "true" || v === "1";
-  }
-  return out;
-}
-
 // `isConsentSource` は将来 source 引数を外部入力にする際の検証用に export
 export { isConsentSource };

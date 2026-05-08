@@ -198,7 +198,10 @@ function AuthorEditModal({
     startTransition(async () => {
       if (isNew) {
         const res = await createAuthor(form);
-        if (!res.ok) return toast.error(`保存失敗: ${res.error}`);
+        if (!res.ok) {
+          toast.error(`保存失敗: ${res.error}`);
+          return;
+        }
         toast.success("著者を追加しました");
         onSaved({
           id: res.data.id,
@@ -215,7 +218,10 @@ function AuthorEditModal({
         });
       } else {
         const res = await updateAuthor(author!.id, form);
-        if (!res.ok) return toast.error(`保存失敗: ${res.error}`);
+        if (!res.ok) {
+          toast.error(`保存失敗: ${res.error}`);
+          return;
+        }
         toast.success("著者を更新しました");
         onSaved({
           ...author!,
@@ -243,7 +249,10 @@ function AuthorEditModal({
       return;
     startTransition(async () => {
       const res = await deleteAuthor(author.id);
-      if (!res.ok) return toast.error(`削除失敗: ${res.error}`);
+      if (!res.ok) {
+        toast.error(`削除失敗: ${res.error}`);
+        return;
+      }
       toast.success("削除しました");
       onDeleted(author.id);
     });

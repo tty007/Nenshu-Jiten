@@ -46,17 +46,17 @@ export const MemberOnly = Node.create({
       // 現在のブロック範囲を memberOnly でラップ
       wrapInMemberOnly:
         () =>
-        ({ commands }) =>
+        ({ commands }: { commands: any }) =>
           commands.wrapIn(this.name),
       // メンバー限定ラップを解除
       unwrapMemberOnly:
         () =>
-        ({ commands }) =>
+        ({ commands }: { commands: any }) =>
           commands.lift(this.name),
       // トグル：現在 memberOnly の中なら解除、外なら包む
       toggleMemberOnly:
         () =>
-        ({ commands, editor }) => {
+        ({ commands, editor }: { commands: any; editor: any }) => {
           if (editor.isActive(this.name)) {
             return commands.lift(this.name);
           }

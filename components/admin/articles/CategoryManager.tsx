@@ -200,12 +200,18 @@ function CategoryEditModal({
     startTransition(async () => {
       if (isNew) {
         const res = await createCategory(form);
-        if (!res.ok) return toast.error(`保存失敗: ${res.error}`);
+        if (!res.ok) {
+          toast.error(`保存失敗: ${res.error}`);
+          return;
+        }
         toast.success("カテゴリを追加しました");
         onSaved();
       } else {
         const res = await updateCategory(category!.id, form);
-        if (!res.ok) return toast.error(`保存失敗: ${res.error}`);
+        if (!res.ok) {
+          toast.error(`保存失敗: ${res.error}`);
+          return;
+        }
         toast.success("カテゴリを更新しました");
         onSaved();
       }
@@ -222,7 +228,10 @@ function CategoryEditModal({
       return;
     startTransition(async () => {
       const res = await deleteCategory(category.id);
-      if (!res.ok) return toast.error(`削除失敗: ${res.error}`);
+      if (!res.ok) {
+        toast.error(`削除失敗: ${res.error}`);
+        return;
+      }
       toast.success("削除しました");
       onDeleted(category.id);
     });

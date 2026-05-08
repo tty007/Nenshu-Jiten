@@ -91,7 +91,10 @@ export function SlugEditor({
     if (next === slug) return;
     startTransition(async () => {
       const res = await setArticleSlug(articleId, next);
-      if (!res.ok) return toast.error(res.error);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
       setSlug(res.data.slug);
       onSlugChange?.(res.data.slug);
       toast.success(

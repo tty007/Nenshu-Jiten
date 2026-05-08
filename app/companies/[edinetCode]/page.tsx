@@ -8,6 +8,9 @@ import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { MetricCard } from "@/components/MetricCard";
 import { CompanyBasicInfoTable } from "@/components/CompanyBasicInfoTable";
+import { CompanyTabs } from "@/components/companies/CompanyTabs";
+import { CompanyArticleList } from "@/components/companies/CompanyArticleList";
+import { getPublishedArticlesForCompany } from "@/lib/data/company-articles";
 import { GatedMhlwSection } from "@/components/GatedMhlwSection";
 import { GatedPositionSalary } from "@/components/GatedPositionSalary";
 import { EarningsTrendChart } from "@/components/charts/EarningsTrendChart";
@@ -156,6 +159,9 @@ export default async function CompanyDetailPage({
 
   const submittedDate = latest.submittedAt ? new Date(latest.submittedAt) : null;
 
+  // この企業に紐付いた公開記事（コンテンツタブ用）
+  const linkedArticles = await getPublishedArticlesForCompany(company.id);
+
   return (
     <>
       <Header />
@@ -168,6 +174,16 @@ export default async function CompanyDetailPage({
           isFavorited={isFavorited}
         />
 
+        <CompanyTabs
+          articleCount={linkedArticles.length}
+          contentTab={
+            <CompanyArticleList
+              articles={linkedArticles}
+              companyName={company.name}
+            />
+          }
+          infoTab={
+            <>
         {company.summary && (
           <section className="mt-8 rounded-2xl border border-surface-border bg-white p-6 sm:p-8">
             <h2 className="text-lg font-bold tracking-tight text-ink sm:text-xl">
@@ -404,6 +420,9 @@ export default async function CompanyDetailPage({
             </a>
           </section>
         )}
+            </>
+          }
+        />
       </main>
       <Footer />
     </>

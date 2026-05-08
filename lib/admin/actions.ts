@@ -7,6 +7,10 @@ import {
   getAdminUserDetail,
   type AdminUserDetail,
 } from "./get-admin-users";
+import {
+  getAdminCompanyDetail,
+  type AdminCompanyDetail,
+} from "./get-admin-company-detail";
 
 export type AdminActionResult =
   | { ok: true; message?: string }
@@ -24,6 +28,21 @@ export async function fetchAdminUserDetail(
   if (!isAdmin) return { ok: false, error: "管理者権限が必要です" };
   const detail = await getAdminUserDetail(userId);
   if (!detail) return { ok: false, error: "ユーザーが見つかりません" };
+  return { ok: true, data: detail };
+}
+
+/**
+ * 企業モーダル：1 社の詳細データ集計を取得。
+ */
+export async function fetchAdminCompanyDetail(
+  companyId: string
+): Promise<
+  { ok: true; data: AdminCompanyDetail } | { ok: false; error: string }
+> {
+  const isAdmin = await isCurrentUserAdmin();
+  if (!isAdmin) return { ok: false, error: "管理者権限が必要です" };
+  const detail = await getAdminCompanyDetail(companyId);
+  if (!detail) return { ok: false, error: "企業が見つかりません" };
   return { ok: true, data: detail };
 }
 

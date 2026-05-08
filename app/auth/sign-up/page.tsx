@@ -18,7 +18,7 @@ export default async function SignUpPage() {
   return (
     <AuthFormShell
       title="会員登録"
-      subtitle="無料・広告なし。30秒で完了します。"
+      subtitle="無料、30秒で完了します。"
       footer={
         <p>
           すでにアカウントをお持ちの方は{" "}

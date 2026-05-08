@@ -8,7 +8,8 @@ export const metadata = {
     "年収辞典の利用条件を定めた利用規約です。本サービスを利用するすべての利用者に適用されます。",
 };
 
-const EFFECTIVE_DATE = "2026年4月29日";
+const EFFECTIVE_DATE = "2026年5月9日";
+const LAST_REVISED = "2026年5月9日（広告掲載・マーケティング目的の利用条項を追加）";
 
 export default function TermsOfServicePage() {
   return (
@@ -19,6 +20,7 @@ export default function TermsOfServicePage() {
           利用規約
         </h1>
         <p className="mt-4 text-sm text-ink-muted">施行日：{EFFECTIVE_DATE}</p>
+        <p className="mt-1 text-xs text-ink-muted">最終改定：{LAST_REVISED}</p>
 
         <section className="mt-8 space-y-3 text-sm leading-relaxed text-ink">
           <p>
@@ -59,12 +61,40 @@ export default function TermsOfServicePage() {
             >
               EDINET
             </a>
-            に各社が提出した有価証券報告書および公的データベースを一次情報として、企業の年収・働き方・業績等の情報を提供します。本サービスは無料で提供されます。
+            に各社が提出した有価証券報告書および公的データベースを一次情報として、企業の年収・働き方・業績等の情報を提供します。本サービスは無料で提供され、その運営費を賄うため広告掲載およびマーケティング目的の情報利用を行うことがあります（詳細は第4条）。
           </p>
         </section>
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
-          <h2 className="text-base font-semibold">第4条（アカウント登録）</h2>
+          <h2 className="text-base font-semibold">
+            第4条（広告掲載およびマーケティング目的の情報利用）
+          </h2>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-muted">
+            <li>
+              本サービスには、当運営者の広告および第三者広告事業者の広告が掲載されることがあります。広告内容は景品表示法・薬機法その他関連法令を遵守します。
+            </li>
+            <li>
+              当運営者は、利用者が同意した場合に限り、登録された属性情報（年代・性別・キャリアステータス・年収レンジ等）に基づき、本サービス内に表示する広告・記事レコメンドをパーソナライズすること、および電子メール・第三者広告ネットワークを通じた広告配信を行うことがあります。
+            </li>
+            <li>
+              利用者は、
+              <Link href="/mypage" className="text-brand hover:underline">
+                マイページ
+              </Link>
+              の「通知・広告配信の設定」から、いつでも広告配信およびマーケティング目的の利用同意を撤回できます。撤回後も、本サービスの基本機能は引き続き利用できます。
+            </li>
+            <li>
+              個人情報および個人関連情報の取扱いに関する詳細は、別途定める{" "}
+              <Link href="/privacy-policy" className="text-brand hover:underline">
+                プライバシーポリシー
+              </Link>{" "}
+              をご確認ください。
+            </li>
+          </ol>
+        </section>
+
+        <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
+          <h2 className="text-base font-semibold">第5条（アカウント登録）</h2>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-muted">
             <li>
               会員登録を希望する者は、当運営者の定める方法により申請するものとします。
@@ -82,7 +112,7 @@ export default function TermsOfServicePage() {
         </section>
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
-          <h2 className="text-base font-semibold">第5条（アカウントの管理）</h2>
+          <h2 className="text-base font-semibold">第6条（アカウントの管理）</h2>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-muted">
             <li>
               利用者は、自己の責任においてアカウント情報（メールアドレス・パスワード等）を適切に管理するものとします。
@@ -94,7 +124,7 @@ export default function TermsOfServicePage() {
         </section>
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
-          <h2 className="text-base font-semibold">第6条（禁止事項）</h2>
+          <h2 className="text-base font-semibold">第7条（禁止事項）</h2>
           <p>
             利用者は、本サービスの利用にあたり、以下の行為を行ってはなりません。
           </p>
@@ -119,7 +149,7 @@ export default function TermsOfServicePage() {
         </section>
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
-          <h2 className="text-base font-semibold">第7条（知的財産権）</h2>
+          <h2 className="text-base font-semibold">第8条（知的財産権）</h2>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-muted">
             <li>
               本サービスにおいて表示される個別の財務情報・人事情報は、各企業が公的機関に提出した公開情報に由来します。
@@ -134,7 +164,7 @@ export default function TermsOfServicePage() {
         </section>
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
-          <h2 className="text-base font-semibold">第8条（免責事項）</h2>
+          <h2 className="text-base font-semibold">第9条（免責事項）</h2>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-muted">
             <li>
               本サービスに掲載する情報は、有価証券報告書および公的データベースから自動取得・自動生成しており、当運営者はその完全性・正確性・最新性を保証しません。
@@ -156,7 +186,7 @@ export default function TermsOfServicePage() {
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
           <h2 className="text-base font-semibold">
-            第9条（サービスの変更・停止・終了）
+            第10条（サービスの変更・停止・終了）
           </h2>
           <p>
             当運営者は、利用者への事前通知なく、本サービスの内容を変更し、または本サービスの提供を停止・終了することができます。これにより利用者または第三者に生じた損害について、当運営者は責任を負いません。
@@ -164,7 +194,7 @@ export default function TermsOfServicePage() {
         </section>
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
-          <h2 className="text-base font-semibold">第10条（退会）</h2>
+          <h2 className="text-base font-semibold">第11条（退会）</h2>
           <p>
             会員は、
             <Link href="/mypage" className="text-brand hover:underline">
@@ -175,14 +205,14 @@ export default function TermsOfServicePage() {
         </section>
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
-          <h2 className="text-base font-semibold">第11条（規約の変更）</h2>
+          <h2 className="text-base font-semibold">第12条（規約の変更）</h2>
           <p>
             当運営者は、必要と判断した場合に、利用者への事前の予告なく本規約を変更できるものとします。変更後の規約は、本サービス上に掲載した時点から効力を生じます。重要な変更については、合理的な方法で利用者に通知します。
           </p>
         </section>
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
-          <h2 className="text-base font-semibold">第12条（準拠法・合意管轄）</h2>
+          <h2 className="text-base font-semibold">第13条（準拠法・合意管轄）</h2>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-muted">
             <li>
               本規約の解釈および本サービスの利用に関しては、日本法を準拠法とします。
@@ -194,7 +224,7 @@ export default function TermsOfServicePage() {
         </section>
 
         <section className="mt-10 space-y-3 text-sm leading-relaxed text-ink">
-          <h2 className="text-base font-semibold">第13条（お問い合わせ）</h2>
+          <h2 className="text-base font-semibold">第14条（お問い合わせ）</h2>
           <p>本規約に関するお問い合わせは、以下までご連絡ください。</p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-muted">
             <li>運営者：年収辞典運営チーム</li>

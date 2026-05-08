@@ -1,7 +1,9 @@
 import { BadgeCheck } from "lucide-react";
 import { EditProfileButton } from "@/components/profile/EditProfileButton";
+import { ConsentTogglesCard } from "@/components/profile/ConsentToggles";
 import { getCurrentProfile, getCurrentUser } from "@/lib/auth/get-user";
 import { getMyUserProfile } from "@/lib/profile/get-user-profile";
+import { getMyConsents } from "@/lib/profile/get-user-consents";
 import {
   CAREER_STATUS_LABELS,
   GENDER_LABELS,
@@ -13,10 +15,11 @@ export const metadata = {
 };
 
 export default async function MypagePage() {
-  const [user, profile, attrs] = await Promise.all([
+  const [user, profile, attrs, consents] = await Promise.all([
     getCurrentUser(),
     getCurrentProfile(),
     getMyUserProfile(),
+    getMyConsents(),
   ]);
   if (!user) return null;
   const createdAt = profile?.createdAt
@@ -98,6 +101,8 @@ export default async function MypagePage() {
           <EditProfileButton initial={attrs} />
         </div>
       </div>
+
+      <ConsentTogglesCard initial={consents} />
     </section>
   );
 }

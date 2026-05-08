@@ -14,6 +14,10 @@ import {
   updatePasswordSchema,
 } from "./schemas";
 import { getCurrentUser } from "./get-user";
+import {
+  extractConsentFlagsFromFormData,
+  recordInitialConsents,
+} from "@/lib/profile/consent-actions";
 
 export type ActionResult =
   | { ok: true; message?: string; redirectTo?: string }
@@ -73,6 +77,12 @@ export async function signUpWithEmail(
     redirect(
       `/auth/sign-in?email=${encodeURIComponent(parsed.data.email)}&error=email_exists`
     );
+  }
+  // 任意の広告配信同意を、フォームのチェック状態のとおり初期登録する。
+  // ここで失敗してもサインアップ自体は通す（同意取得は後からマイページでも可能）。
+  if (data.user?.id) {
+    const consents = extractConsentFlagsFromFormData(formData);
+    await recordInitialConsents(data.user.id, consents, "signup");
   }
   redirect("/auth/verify-email");
 }

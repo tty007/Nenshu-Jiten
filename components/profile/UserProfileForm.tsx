@@ -47,6 +47,12 @@ export function UserProfileForm({
   }, [state]);
   return (
     <form action={formAction} className="space-y-5">
+      <p className="rounded-lg border border-surface-border bg-surface-soft/40 p-3 text-xs leading-relaxed text-ink-muted">
+        以下の属性はすべて任意です。入力いただいた情報は、業界平均との比較表示や、同意いただいた場合の記事レコメンド・広告のパーソナライズに利用します。広告利用に関する同意は<a
+          href="/mypage"
+          className="text-brand hover:underline"
+        >マイページ</a>からいつでも変更できます。
+      </p>
       <FieldRow
         label="ニックネーム"
         htmlFor="nickname"
@@ -67,7 +73,7 @@ export function UserProfileForm({
         label="生まれ年"
         htmlFor="birthYear"
         errors={fieldErrors.birthYear}
-        hint="任意。年単位のみ収集します（誕生日は不要）"
+        hint="任意。年単位のみ収集します（誕生日は不要）。年代別の年収比較や同年代向けの記事レコメンドに利用します。"
       >
         <Select
           id="birthYear"
@@ -87,7 +93,7 @@ export function UserProfileForm({
         label="性別"
         htmlFor="gender"
         errors={fieldErrors.gender}
-        hint="任意。自己申告"
+        hint="任意。自己申告。男女別の賃金差データ表示や属性別の統計集計に利用します。"
       >
         <RadioGroup
           name="gender"
@@ -100,7 +106,7 @@ export function UserProfileForm({
         label="現住所（都道府県）"
         htmlFor="prefecture"
         errors={fieldErrors.prefecture}
-        hint="任意。市区町村以下は収集しません"
+        hint="任意。市区町村以下は収集しません。地域別の年収相場表示や近隣求人系コンテンツのレコメンドに利用します。"
       >
         <Select
           id="prefecture"
@@ -120,7 +126,7 @@ export function UserProfileForm({
         label="キャリアステータス"
         htmlFor="careerStatus"
         errors={fieldErrors.careerStatus}
-        hint="任意"
+        hint="任意。学生か社会人かで、表示する記事や比較対象を最適化します。"
       >
         <RadioGroup
           name="careerStatus"
@@ -136,7 +142,7 @@ export function UserProfileForm({
         label="現在の年収"
         htmlFor="salaryBand"
         errors={fieldErrors.salaryBand}
-        hint="任意。区分（レンジ）から選択"
+        hint="任意。レンジから選択（金額単位は収集しません）。同水準・上位水準の企業比較や転職系コンテンツのレコメンドに利用します。"
       >
         <Select
           id="salaryBand"

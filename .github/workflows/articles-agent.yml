@@ -16,10 +16,12 @@ on:
         required: false
         default: "1"
   schedule:
-    # 30 分ごとに自動チェック。queued / 孤児ジョブがあればその場でドレイン。
-    # PAT が無くてもこの cron がフォールバックで pickup する。
-    # 即時起動は createAgentJob 内の after() で Vercel 側が数件分だけ処理する設計。
-    - cron: "*/30 * * * *"
+    # 5 分ごとに自動チェック。public リポジトリでは GitHub Actions Linux ランナー
+    # が無制限無料なので、頻度を上げても料金は発生しない。
+    # Vercel after() の 4 分予算が切れた直後でもほぼ取りこぼさない設計。
+    # 補完的に runDrainJob は終了時に last_heartbeat_at を 12 分前にセットして
+    # 「stale running」判定が即座に立つようにしている。
+    - cron: "*/5 * * * *"
 
 # 同一 job_id への重複ドレインは 1 つに直列化（タスクは claim_next_task で
 # 既に排他制御されているが、無駄な runner を増やさないため）。

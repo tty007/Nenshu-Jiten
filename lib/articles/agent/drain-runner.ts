@@ -240,6 +240,21 @@ export async function runDrainJob(
 
   stopHeartbeat();
 
+  // 「予算切れで途中終了 (= ジョブはまだ running、pending 残あり)」のとき、
+  // heartbeat を意図的に「stale 判定の閾値より古い時刻」に書き換える。
+  //
+  // これがないと、findNextClaimableJobId の "running with stale heartbeat (>10 min)"
+  // 判定が立つまで最大 10 分のロスが発生し、次の cron が短い間隔（*/5）でも
+  // ジョブを拾わない時間帯ができてしまう。明示的に stale 化することで、
+  // 直後の cron が即座に pickup できる。
+  if (!finalized && !paused && cur.pending_count > 0 && !cur.cancel_requested) {
+    const staleAt = new Date(Date.now() - 12 * 60_000).toISOString();
+    await sb
+      .from("agent_jobs")
+      .update({ last_heartbeat_at: staleAt })
+      .eq("id", jobId);
+  }
+
   return {
     jobId,
     processed,

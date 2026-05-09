@@ -9,18 +9,12 @@ import {
 } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ArrowLeft,
-  BarChart3,
-  Bot,
-  Building2,
-  ChevronsRight,
-  FileText,
-  FolderTree,
-  Shield,
-  Users,
-} from "lucide-react";
+import { ArrowLeft, ChevronsRight, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  ADMIN_NAV_ITEMS,
+  activeAdminNavHref,
+} from "@/components/admin/admin-nav-items";
 
 const STORAGE_KEY = "admin-sidebar-collapsed";
 
@@ -40,26 +34,6 @@ const SidebarContext = createContext<SidebarContextValue | null>(null);
 export function useAdminSidebar(): SidebarContextValue | null {
   return useContext(SidebarContext);
 }
-
-// =====================================================================
-// Nav 定義
-// =====================================================================
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: React.ReactNode;
-};
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/admin", label: "ダッシュボード", icon: <BarChart3 className="h-4 w-4" /> },
-  { href: "/admin/users", label: "ユーザー", icon: <Users className="h-4 w-4" /> },
-  { href: "/admin/companies", label: "企業リスト", icon: <Building2 className="h-4 w-4" /> },
-  { href: "/admin/articles", label: "記事一覧", icon: <FileText className="h-4 w-4" /> },
-  { href: "/admin/articles/agent", label: "記事制作エージェント", icon: <Bot className="h-4 w-4" /> },
-  { href: "/admin/articles/authors", label: "著者管理", icon: <Users className="h-4 w-4" /> },
-  { href: "/admin/articles/categories", label: "カテゴリ管理", icon: <FolderTree className="h-4 w-4" /> },
-];
 
 // =====================================================================
 // AdminShell
@@ -116,10 +90,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               : "lg:grid-cols-[220px_1fr] lg:gap-x-10"
           )}
         >
-          {/* サイドバー：常時 DOM に残し、CSS で幅 0 にして滑らかに収納 */}
+          {/* サイドバー：lg+ のみ。lg 未満では Header の MobileNav 側で出す。 */}
           <aside
             className={cn(
-              "lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-hidden transition-opacity duration-300 ease-out",
+              "hidden lg:block lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-hidden transition-opacity duration-300 ease-out",
               collapsed
                 ? "pointer-events-none opacity-0"
                 : "opacity-100 lg:overflow-y-auto"
@@ -136,8 +110,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
-      {/* 折りたたみ中だけ：左下に開くボタンを浮動表示（どのページからでも開ける）
-          常時 render してフェード in/out。閉じている時のみインタラクト可能 */}
+      {/* lg+ で折りたたみ中だけ：左下に開くボタン */}
       <button
         type="button"
         onClick={toggle}
@@ -146,7 +119,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         aria-hidden={!collapsed}
         tabIndex={collapsed ? 0 : -1}
         className={cn(
-          "fixed bottom-6 left-6 z-40 inline-flex items-center gap-1.5 rounded-full border border-surface-border bg-white px-3 py-2 text-xs font-medium text-ink shadow-lg transition-all duration-300 ease-out hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700",
+          "fixed bottom-6 left-6 z-40 hidden items-center gap-1.5 rounded-full border border-surface-border bg-white px-3 py-2 text-xs font-medium text-ink shadow-lg transition-all duration-300 ease-out hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 lg:inline-flex",
           collapsed
             ? "translate-y-0 opacity-100"
             : "pointer-events-none translate-y-2 opacity-0"
@@ -169,6 +142,7 @@ function Sidebar({
   hydrated: boolean;
 }) {
   const pathname = usePathname();
+  const activeHref = activeAdminNavHref(pathname);
 
   return (
     <div className="space-y-2 text-sm">
@@ -177,8 +151,8 @@ function Sidebar({
       </p>
 
       <nav className="flex flex-col gap-1">
-        {NAV_ITEMS.map((item) => {
-          const isActive = activeNavHref(pathname, NAV_ITEMS) === item.href;
+        {ADMIN_NAV_ITEMS.map((item) => {
+          const isActive = activeHref === item.href;
           return (
             <Link
               key={item.href}
@@ -207,27 +181,4 @@ function Sidebar({
       {!hydrated && <span className="sr-only">loading</span>}
     </div>
   );
-}
-
-function isActiveLink(pathname: string | null, href: string): boolean {
-  if (!pathname) return false;
-  if (href === "/admin") return pathname === "/admin";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-/**
- * NAV_ITEMS から最長一致する href を返す。
- * 例: /admin/articles/authors にいる時、/admin/articles と
- * /admin/articles/authors の両方が startsWith に該当するので、
- * より長い後者のみをアクティブ扱いにする。
- */
-function activeNavHref(pathname: string | null, items: NavItem[]): string | null {
-  if (!pathname) return null;
-  let best: string | null = null;
-  for (const it of items) {
-    if (isActiveLink(pathname, it.href)) {
-      if (!best || it.href.length > best.length) best = it.href;
-    }
-  }
-  return best;
 }

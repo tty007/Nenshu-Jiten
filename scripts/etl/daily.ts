@@ -164,28 +164,51 @@ async function processOneDoc(
 
     // financial_metrics
     if (Number.isFinite(fin.fiscalYear)) {
-      const { error: fErr } = await supabaseAdmin
+      // 決算期変更で同じ fiscal_year に変則期と通常期がぶつかることがある
+      // (例: 2024-04-01〜2024-10-31 の7ヶ月変則期 と 2024-11-01〜2025-10-31 の新通常期が
+      //  どちらも period_start 基準で FY=2024 と推定される)。
+      // ここで submitted_at の新しい方を勝たせ、古い変則期データで新しい通常期を上書きしないようにする。
+      const { data: existing, error: exErr } = await supabaseAdmin
         .from("financial_metrics")
-        .upsert(
-          {
-            company_id: companyRow.id,
-            fiscal_year: fin.fiscalYear,
-            average_annual_salary: fin.averageAnnualSalary,
-            average_age: fin.averageAge,
-            average_tenure_years: fin.averageTenureYears,
-            employee_count: fin.employeeCount,
-            female_manager_ratio: fin.femaleManagerRatio,
-            average_overtime_hours: fin.averageOvertimeHours,
-            revenue: fin.revenue,
-            operating_income: fin.operatingIncome,
-            ordinary_income: fin.ordinaryIncome,
-            net_income: fin.netIncome,
-            doc_id: docId,
-            submitted_at: d.submitDateTime,
-          },
-          { onConflict: "company_id,fiscal_year" }
+        .select("submitted_at, doc_id")
+        .eq("company_id", companyRow.id)
+        .eq("fiscal_year", fin.fiscalYear)
+        .maybeSingle();
+      if (exErr) throw exErr;
+      const incomingTs = d.submitDateTime
+        ? new Date(d.submitDateTime).getTime()
+        : 0;
+      const existingTs = existing?.submitted_at
+        ? new Date(existing.submitted_at).getTime()
+        : 0;
+      if (existing && existingTs > incomingTs) {
+        console.log(
+          `  SKIP fm ${docId} (FY=${fin.fiscalYear}): 既存 ${existing.doc_id} の方が新しい`
         );
-      if (fErr) throw fErr;
+      } else {
+        const { error: fErr } = await supabaseAdmin
+          .from("financial_metrics")
+          .upsert(
+            {
+              company_id: companyRow.id,
+              fiscal_year: fin.fiscalYear,
+              average_annual_salary: fin.averageAnnualSalary,
+              average_age: fin.averageAge,
+              average_tenure_years: fin.averageTenureYears,
+              employee_count: fin.employeeCount,
+              female_manager_ratio: fin.femaleManagerRatio,
+              average_overtime_hours: fin.averageOvertimeHours,
+              revenue: fin.revenue,
+              operating_income: fin.operatingIncome,
+              ordinary_income: fin.ordinaryIncome,
+              net_income: fin.netIncome,
+              doc_id: docId,
+              submitted_at: d.submitDateTime,
+            },
+            { onConflict: "company_id,fiscal_year" }
+          );
+        if (fErr) throw fErr;
+      }
     }
     return "ok";
   } catch (e) {
@@ -240,6 +263,10 @@ async function main() {
     for (const d of list) {
       if (d.docTypeCode !== "120") continue;
       if (d.formCode !== "030000") continue;
+      // ordinance_code 010 = 企業内容等の開示に関する内閣府令 (国内企業の有報)。
+      // 020 (外国会社等) は本サービス対象外。XBRL スキーマも違うので parse 結果が壊れる。
+      // 例: スロベニア共和国の届出は 020 で、type=1 ZIP も提供されない。
+      if (d.ordinanceCode !== "010") continue;
       if (!d.edinetCode) continue;
       docs.push(d as ProcessableDoc);
     }

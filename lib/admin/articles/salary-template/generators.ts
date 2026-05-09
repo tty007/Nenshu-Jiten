@@ -863,22 +863,32 @@ async function genPeerComparison(
   ctx: SalaryArticleContext,
   model: AiModelId
 ): Promise<GenerateResult | { ok: false; error: string }> {
-  const { company, peers } = ctx;
-  if (peers.length === 0) {
+  const { company, peers, peer_meta } = ctx;
+  const totalInIndustry = peer_meta.total_in_industry;
+  const selfRank = peer_meta.self_rank;
+
+  if (peers.length === 0 || totalInIndustry === 0) {
     return {
       html: `<h2>同業他社との比較</h2><p>同業界の比較データを準備中です。</p>`,
       usage: ZERO_USAGE,
     };
   }
-  const top = [...peers].sort(
-    (a, b) => (b.latest_avg_salary ?? -1) - (a.latest_avg_salary ?? -1)
-  );
-  const selfIdx = top.findIndex((p) => p.id === company.id);
-  const rows = top
-    .map((p, i) => {
-      const isSelf = p.id === company.id;
-      return `<tr${isSelf ? ' style="background: #fff7ed;"' : ""}>
-  <td>${i + 1}</td>
+
+  // 実順位昇順で並べる（既にそうなっている想定だが念のため）
+  const sorted = [...peers].sort((a, b) => a.rank - b.rank);
+
+  // 表：実順位を表示。表示行間に順位の飛びがある場合は「…」行で区切る
+  const tableRows: string[] = [];
+  let prevRank = 0;
+  for (const p of sorted) {
+    if (prevRank > 0 && p.rank > prevRank + 1) {
+      tableRows.push(
+        `<tr><td colspan="4" style="text-align:center; color:#9ca3af;">…</td></tr>`
+      );
+    }
+    const isSelf = p.id === company.id;
+    tableRows.push(`<tr${isSelf ? ' style="background: #fff7ed;"' : ""}>
+  <td>${p.rank}</td>
   <td>${
     isSelf
       ? `<strong>${escapeHtml(p.name)}</strong>`
@@ -886,38 +896,73 @@ async function genPeerComparison(
   }</td>
   <td>${toManYen(p.latest_avg_salary)}</td>
   <td>${formatNumber(p.latest_employee_count)} 人</td>
-</tr>`;
-    })
-    .join("");
+</tr>`);
+    prevRank = p.rank;
+  }
+  const tableCaption = `<p class="table-caption">${escapeHtml(
+    company.industry_name ?? "—"
+  )} のうち平均年収を有価証券報告書に記載している ${totalInIndustry} 社${
+    selfRank != null ? ` 中 ${selfRank} 位` : ""
+  }${selfRank != null ? `（${escapeHtml(company.name)}）` : ""}</p>`;
   const tableHtml = `<table>
   <thead>
     <tr><th>順位</th><th>会社名</th><th>平均年収</th><th>従業員数</th></tr>
   </thead>
-  <tbody>${rows}</tbody>
-</table>`;
+  <tbody>${tableRows.join("")}</tbody>
+</table>
+${tableCaption}`;
 
-  const peerListForAi = top
+  // AI 用テキスト
+  const peerListForAi = sorted
     .map(
-      (p, i) =>
-        `${i + 1}位: ${p.name}（年収 ${toManYen(p.latest_avg_salary)}, 従業員 ${formatNumber(p.latest_employee_count)} 人）`
+      (p) =>
+        `${p.rank}位: ${p.name}（年収 ${toManYen(p.latest_avg_salary)}, 従業員 ${formatNumber(p.latest_employee_count)} 人）`
     )
     .join("\n");
 
-  const userPrompt = `${company.name}（順位 ${
-    selfIdx + 1
-  }/${top.length} 社）が同業界（${
-    company.industry_name ?? "—"
-  }）の中で占める位置を、2 段落（合計 300〜450 字）で読み解いてください。
+  const top1 = sorted[0];
+  const selfFromList = sorted.find((p) => p.id === company.id);
+  const gapToTop =
+    selfFromList?.latest_avg_salary != null &&
+    top1?.latest_avg_salary != null &&
+    selfFromList.id !== top1.id
+      ? top1.latest_avg_salary - selfFromList.latest_avg_salary
+      : null;
+  const percentile =
+    selfRank != null && totalInIndustry > 0
+      ? Math.round((selfRank / totalInIndustry) * 100)
+      : null;
 
-ランキング:
+  const userPrompt = `${company.name} の同業界 ${
+    company.industry_name ?? "—"
+  } における平均年収の位置を、2 段落（合計 300〜450 字）で読み解いてください。
+
+【データの範囲（重要）】
+- 母数は「${company.industry_name ?? "—"} に分類されており、平均年収を有価証券報告書に記載している企業」
+- その総数：${totalInIndustry} 社（自社含む）
+- 業界全体の企業数ではなく、有報提出 + 開示企業の中の数値です
+${selfRank != null ? `- ${company.name} の順位：${totalInIndustry} 社中 ${selfRank} 位` : `- ${company.name} は平均年収を未開示のため母数の対象外`}
+${percentile != null ? `- 上位パーセンタイル：上位約 ${percentile}%` : ""}
+${
+  gapToTop != null
+    ? `- 1 位 ${top1.name} の平均年収 ${toManYen(
+        top1.latest_avg_salary
+      )} との差：${toManYen(gapToTop)}`
+    : ""
+}
+
+【上位ランキング（および ${company.name}）】
 ${peerListForAi}
 
-ポイント:
-- 上位社との金額差を 1 つ具体的に
-- ${company.name} の従業員規模が、年収の高低に影響している可能性に触れてよい（断定しない）
-- 「上位約 X%」のような表現を 1 度入れる
+【厳守事項】
+- 「業界全体での順位」と「有報提出 + 平均年収開示企業内の順位」を絶対に混同しない
+- 「最下位」「業界トップクラス」「業界の最低水準」など、データ範囲を超えた断定はしない
+- 「同業界において」「業界内で」のような表現を使う場合は、必ず「（有報を提出して平均年収を開示している ${totalInIndustry} 社のうち）」のような注釈を一度添える
+- 1 位企業との金額差を 1 度だけ具体的に書く
+- 従業員規模が年収に影響している可能性は触れて良い（断定はしない）
+- ${selfRank != null && percentile != null ? `「上位約 ${percentile}%」のような相対的位置を 1 度書いてよい` : "順位や上位 X% を断定しない"}
 
-<p> タグの段落のみ。見出しは不要。`;
+<p> タグの段落のみ。見出し（h2/h3）は不要。`;
 
   const r = await callOpenAi({
     model,

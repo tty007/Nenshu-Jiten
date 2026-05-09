@@ -265,6 +265,7 @@ export async function getSalaryDialogOpenMeta(
     history: trimmed.history,
     industry_averages: [],
     peers: [],
+    peer_meta: { total_in_industry: 0, self_rank: null },
   });
 
   // 4) データソースメタ（getSalaryDataSourceMeta と同じロジック）

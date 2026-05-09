@@ -372,6 +372,19 @@ html { scroll-behavior: smooth; }
   text-align: left;
 }
 
+/* テーブルキャプション風の小さい注記 (<p class="table-caption">)。
+   テンプレ生成器が表の直後に出力する「N社中 X 位」のような母数注記を、
+   グレー & 小さめフォントで表のすぐ下に貼り付けるスタイル。
+   .tiptap-content / .article-body の > * + * { margin-top: 1.2em } を
+   class セレクタで上書きするので !important は不要。 */
+.tiptap-content .table-caption,
+.article-body .table-caption {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: #6b7280;
+  margin-top: 0.4rem;
+}
+
 /* テンプレ生成テーブル：行ごとの意味付け色 */
 .tiptap-content table tr.row-subtotal > td,
 .article-body table tr.row-subtotal > td {

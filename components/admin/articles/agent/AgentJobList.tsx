@@ -57,35 +57,18 @@ export function AgentJobList({ jobs }: Props) {
           </p>
         </div>
       ) : (
-        <>
-          {/* ヘッダ行 */}
-          <div
-            className={cn(
-              GRID,
-              "border-b border-surface-border bg-surface-muted/40 px-6 py-2 text-[10px] font-semibold uppercase tracking-wider text-ink-subtle"
-            )}
-          >
-            <div>状態</div>
-            <div>ラベル / メタ</div>
-            <div>進捗</div>
-            <div className="text-right">コスト</div>
-            <div>作成日時</div>
-            <div className="text-right">経過</div>
-          </div>
-
-          <ul className="divide-y divide-surface-border">
-            {jobs.map((j) => (
-              <li key={j.id}>
-                <Link
-                  href={`/admin/articles/agent/${j.id}`}
-                  className={cn(GRID, "px-6 py-3 transition hover:bg-brand-50/30")}
-                >
-                  <JobRow job={j} />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </>
+        <ul className="divide-y divide-surface-border">
+          {jobs.map((j) => (
+            <li key={j.id}>
+              <Link
+                href={`/admin/articles/agent/${j.id}`}
+                className={cn(GRID, "px-6 py-3 transition hover:bg-brand-50/30")}
+              >
+                <JobRow job={j} />
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

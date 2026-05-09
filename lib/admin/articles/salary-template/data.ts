@@ -60,6 +60,20 @@ export type SalaryPeerCompany = {
   latest_avg_salary: number | null;
   latest_employee_count: number | null;
   latest_fiscal_year: number | null;
+  /**
+   * 業界内（有報提出 + 平均年収公開）での実順位 (1-based)。
+   * 平均年収が null の企業は順位付けから除外される。
+   * 表示上の位置 (peers 配列内 index) とは別物。
+   */
+  rank: number;
+};
+
+/** 同業界比較の集計メタ（順位の母数を読者にも明示するため） */
+export type SalaryPeerMeta = {
+  /** 業界 industry_code 内で「有報を提出 + 平均年収を公開」している企業の総数（自社含む） */
+  total_in_industry: number;
+  /** 自社の実順位 (1-based)。自社の平均年収が null なら null */
+  self_rank: number | null;
 };
 
 export type SalaryArticleContext = {
@@ -71,7 +85,8 @@ export type SalaryArticleContext = {
   /** 新しい年度から並ぶ */
   history: SalaryFinancialMetric[];
   industry_averages: SalaryIndustryAverage[]; // 同業界・全年度
-  peers: SalaryPeerCompany[]; // 同業界の上位 N 社（自社含む）
+  peers: SalaryPeerCompany[]; // 同業界の上位 N 社（自社含む）。各要素に実順位 rank を持つ
+  peer_meta: SalaryPeerMeta; // 業界内の母数と自社実順位
 };
 
 // =====================================================================
@@ -282,7 +297,7 @@ export async function loadSalaryArticleContext(
   }
 
   // 同業界の上位企業（最新年度の平均年収順）
-  const peers = await loadPeers(company.industry_code, company.id, PEER_LIMIT);
+  const peerResult = await loadPeers(company.industry_code, company.id, PEER_LIMIT);
 
   // 平均年収データが入った行を最新として扱えるよう history をトリム。
   // 1 年前にもデータが無ければ history は空配列になり、呼び出し側で
@@ -296,7 +311,8 @@ export async function loadSalaryArticleContext(
       company,
       history: trimmed.history,
       industry_averages,
-      peers,
+      peers: peerResult.peers,
+      peer_meta: peerResult.meta,
     },
   };
 }
@@ -305,27 +321,28 @@ async function loadPeers(
   industryCode: string | null,
   selfCompanyId: string,
   limit: number
-): Promise<SalaryPeerCompany[]> {
-  if (!industryCode) return [];
+): Promise<{ peers: SalaryPeerCompany[]; meta: SalaryPeerMeta }> {
+  const empty: { peers: SalaryPeerCompany[]; meta: SalaryPeerMeta } = {
+    peers: [],
+    meta: { total_in_industry: 0, self_rank: null },
+  };
+  if (!industryCode) return empty;
   const sb = createSupabaseAdminClient();
 
   const cRes = await sb
     .from("companies")
     .select("id, edinet_code, name")
     .eq("industry_code", industryCode);
-  if (cRes.error || !cRes.data || cRes.data.length === 0) return [];
+  if (cRes.error || !cRes.data || cRes.data.length === 0) return empty;
 
   const ids = cRes.data.map((c: any) => c.id as string);
 
-  // 各社の最新年度のみ取得（軽量に limit を多めに）
   const fmRes = await sb
     .from("financial_metrics")
-    .select(
-      "company_id, fiscal_year, average_annual_salary, employee_count"
-    )
+    .select("company_id, fiscal_year, average_annual_salary, employee_count")
     .in("company_id", ids)
     .order("fiscal_year", { ascending: false });
-  if (fmRes.error || !fmRes.data) return [];
+  if (fmRes.error || !fmRes.data) return empty;
 
   // 各 company の最新年度を採用
   const latestByCompany = new Map<
@@ -346,31 +363,46 @@ async function loadPeers(
     });
   }
 
-  const rows: SalaryPeerCompany[] = cRes.data.map((c: any) => {
-    const m = latestByCompany.get(c.id as string);
-    return {
-      id: c.id,
-      edinet_code: c.edinet_code,
-      name: c.name,
-      latest_avg_salary: m?.average_annual_salary ?? null,
-      latest_employee_count: m?.employee_count ?? null,
-      latest_fiscal_year: m?.fiscal_year ?? null,
-    };
+  // 平均年収を有報に記載している企業だけを順位付け対象にする。
+  // null の企業を含めて「業界全体」の母数にすると、母数の意味が曖昧になり、
+  // 「業界全体での順位」と読者が誤読するため避ける。
+  const rankedAll: SalaryPeerCompany[] = cRes.data
+    .map((c: any) => {
+      const m = latestByCompany.get(c.id as string);
+      return {
+        id: c.id as string,
+        edinet_code: c.edinet_code as string,
+        name: c.name as string,
+        latest_avg_salary: m?.average_annual_salary ?? null,
+        latest_employee_count: m?.employee_count ?? null,
+        latest_fiscal_year: m?.fiscal_year ?? null,
+        rank: 0, // 後続で確定
+      };
+    })
+    .filter((r) => r.latest_avg_salary != null);
+
+  rankedAll.sort(
+    (a, b) => (b.latest_avg_salary ?? 0) - (a.latest_avg_salary ?? 0)
+  );
+  rankedAll.forEach((r, i) => {
+    r.rank = i + 1;
   });
 
-  // 平均年収降順、自社を含む上位 N 社
-  rows.sort(
-    (a, b) =>
-      (b.latest_avg_salary ?? -1) - (a.latest_avg_salary ?? -1)
-  );
+  const total = rankedAll.length;
+  const self = rankedAll.find((r) => r.id === selfCompanyId) ?? null;
+  const selfRank = self?.rank ?? null;
 
-  const top = rows.slice(0, limit);
-  if (!top.some((r) => r.id === selfCompanyId)) {
-    const self = rows.find((r) => r.id === selfCompanyId);
-    if (self) {
-      top.pop();
-      top.push(self);
-    }
+  // 表示：上位 limit 社。自社が上位圏外なら、limit-1 件 + 自社（実順位付き）で limit 件にする。
+  let peers: SalaryPeerCompany[];
+  const top = rankedAll.slice(0, limit);
+  if (self && !top.some((p) => p.id === selfCompanyId)) {
+    peers = [...rankedAll.slice(0, Math.max(0, limit - 1)), self];
+  } else {
+    peers = top;
   }
-  return top;
+
+  return {
+    peers,
+    meta: { total_in_industry: total, self_rank: selfRank },
+  };
 }

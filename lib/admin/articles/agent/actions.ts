@@ -10,7 +10,6 @@ import {
   isAnotherJobActive,
   runDrainJob,
 } from "@/lib/articles/agent/drain-runner";
-import { triggerNextChain } from "@/lib/articles/agent/chain";
 import {
   computeJobScopePreview,
   listAgentJobs as listAgentJobsRead,
@@ -96,9 +95,18 @@ export type CreateJobInput = {
   notes?: string | null;
 };
 
+/**
+ * PAT 経由の GitHub Actions dispatch は失敗してもジョブ作成自体は成功扱いに
+ * したいので、dispatchWarning を別フィールドで返す。UI 側はこれが入っていたら
+ * 「ジョブは作ったが GitHub Actions の即時起動に失敗した」と通知する。
+ */
+type CreateAgentJobResult =
+  | { ok: true; data: { jobId: string }; dispatchWarning?: string }
+  | { ok: false; error: string };
+
 export async function createAgentJob(
   input: CreateJobInput
-): Promise<ActionResult<{ jobId: string }>> {
+): Promise<CreateAgentJobResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return auth;
   const user = await getCurrentUser();
@@ -263,6 +271,7 @@ export async function createAgentJob(
   //    findNextClaimableJobId 経由でこのジョブに自動で移る。
   //    PAT による GH Actions dispatch も同じ条件で gate する（並列起動を防ぐ）。
   const anotherActive = await isAnotherJobActive(sb, jobId);
+  let dispatchWarning: string | undefined;
 
   if (!anotherActive) {
     const dispatch = await dispatchAgentWorker({
@@ -276,10 +285,10 @@ export async function createAgentJob(
         .update({ last_dispatched_at: new Date().toISOString() })
         .eq("id", jobId);
     } else {
-      // PAT が無いだけのケースが大半なので info レベル相当
       console.log(
         `[createAgentJob] dispatch skipped/failed: ${dispatch.error}`
       );
+      dispatchWarning = `GitHub Actions の即時起動に失敗しました：${dispatch.error}。次の cron (5 分以内) で自動再開されます。`;
     }
   } else {
     console.log(
@@ -311,16 +320,6 @@ export async function createAgentJob(
       console.log(
         `[createAgentJob:after] drained jobs=${result.jobs} lastFinalized=${result.lastResult?.finalized ?? "n/a"}`
       );
-      // 4 分予算で処理しきれず pending が残っているなら、自分自身に
-      // チェーンを起動して連続処理を継続する（cron 待ち回避）。
-      if (
-        result.lastResult &&
-        !result.lastResult.finalized &&
-        !result.lastResult.paused &&
-        result.lastResult.remainingPending > 0
-      ) {
-        await triggerNextChain({ jobId, depth: 0 });
-      }
     } catch (e) {
       console.warn(
         `[createAgentJob:after] drain failed: ${(e as Error).message}`
@@ -328,7 +327,7 @@ export async function createAgentJob(
     }
   });
 
-  return { ok: true, data: { jobId } };
+  return { ok: true, data: { jobId }, dispatchWarning };
 }
 
 // =====================================================================
@@ -596,20 +595,12 @@ export async function resumeAgentJob(
       try {
         const sbAfter = createSupabaseAdminClient();
         if (await isAnotherJobActive(sbAfter, jobId)) return;
-        const result = await drainUntilBudgetOut(sbAfter, {
+        await drainUntilBudgetOut(sbAfter, {
           maxMinutes: 4,
           concurrency: 1,
           runId: `vercel-resume-${Date.now().toString(36)}`,
           verbose: false,
         });
-        if (
-          result.lastResult &&
-          !result.lastResult.finalized &&
-          !result.lastResult.paused &&
-          result.lastResult.remainingPending > 0
-        ) {
-          await triggerNextChain({ jobId, depth: 0 });
-        }
       } catch (e) {
         console.warn(
           `[resumeAgentJob:after] drain failed: ${(e as Error).message}`
@@ -656,9 +647,13 @@ export async function updateAgentJobNotes(
  * - 他に走っているジョブがあれば直列ポリシーを尊重して待たせる（dispatch しない）
  * - 完了済 / キャンセル / 失敗 / 一時停止のジョブには使えない（resume を使う）
  */
+type DispatchAgentJobResult =
+  | { ok: true; dispatchWarning?: string }
+  | { ok: false; error: string };
+
 export async function dispatchAgentJob(
   jobId: string
-): Promise<ActionResult> {
+): Promise<DispatchAgentJobResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return auth;
 
@@ -703,6 +698,7 @@ export async function dispatchAgentJob(
   );
 
   // PAT があれば GH Actions も dispatch（無くても続行）
+  let dispatchWarning: string | undefined;
   const dispatch = await dispatchAgentWorker({
     jobId,
     maxMinutes: 300,
@@ -717,6 +713,7 @@ export async function dispatchAgentJob(
     console.log(
       `[dispatchAgentJob] PAT dispatch skipped/failed: ${dispatch.error}`
     );
+    dispatchWarning = `GitHub Actions の即時起動に失敗しました：${dispatch.error}。Vercel 側で 4 分処理した後、cron (5 分以内) で続きを処理します。`;
   }
 
   // PAT 有無に関わらず Vercel 側でも即時ドレインを試みる。
@@ -727,7 +724,7 @@ export async function dispatchAgentJob(
       const sbAfter = createSupabaseAdminClient();
       // 別のジョブが走っている場合は直列ポリシーを尊重して何もしない
       if (await isAnotherJobActive(sbAfter, jobId)) return;
-      const result = await runDrainJob({
+      await runDrainJob({
         sb: sbAfter,
         jobId,
         maxMinutes: 4,
@@ -735,13 +732,6 @@ export async function dispatchAgentJob(
         runId: `vercel-dispatch-${Date.now().toString(36)}`,
         verbose: false,
       });
-      if (
-        !result.finalized &&
-        !result.paused &&
-        result.remainingPending > 0
-      ) {
-        await triggerNextChain({ jobId, depth: 0 });
-      }
     } catch (e) {
       console.warn(
         `[dispatchAgentJob:after] drain failed: ${(e as Error).message}`
@@ -750,5 +740,5 @@ export async function dispatchAgentJob(
   });
 
   revalidatePath(`/admin/articles/agent/${jobId}`);
-  return { ok: true };
+  return { ok: true, dispatchWarning };
 }

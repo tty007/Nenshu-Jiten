@@ -64,6 +64,24 @@ async function main() {
 
   console.log(`[auto-drain] starting run=${runId}`);
 
+  // ===== 診断ログ：起動時の DB 状態を可視化 =====
+  // 「cron が動いているはずなのに何もしない」を後追いできるよう、
+  // queued / running / heartbeat 状況を毎回ログに出す。
+  try {
+    const cutoff = new Date(Date.now() - 10 * 60_000).toISOString();
+    const [queued, running, stale, pending] = await Promise.all([
+      sb.from("agent_jobs").select("id", { count: "exact", head: true }).eq("status", "queued"),
+      sb.from("agent_jobs").select("id", { count: "exact", head: true }).eq("status", "running"),
+      sb.from("agent_jobs").select("id", { count: "exact", head: true }).eq("status", "running").or(`last_heartbeat_at.is.null,last_heartbeat_at.lt.${cutoff}`),
+      sb.from("agent_job_tasks").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    ]);
+    console.log(
+      `[auto-drain] state: queued=${queued.count ?? 0} running=${running.count ?? 0} stale_running=${stale.count ?? 0} pending_tasks=${pending.count ?? 0}`
+    );
+  } catch (e) {
+    console.warn(`[auto-drain] state log: ${(e as Error).message}`);
+  }
+
   // 期限切れリースを解放（孤児タスクを別 worker が拾えるようにする）
   try {
     const released = await releaseExpiredLeases(sb);

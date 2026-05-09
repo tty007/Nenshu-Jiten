@@ -159,6 +159,10 @@ export function AgentJobDetailLive({
           ? "実行を開始しました"
           : "ワーカーを再起動しました"
       );
+      // PAT 経由の GitHub Actions 起動が失敗していた場合は警告 toast を別途出す
+      if (r.dispatchWarning) {
+        toast.error(r.dispatchWarning);
+      }
       router.refresh();
     });
   };

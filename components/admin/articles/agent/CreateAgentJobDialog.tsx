@@ -205,6 +205,10 @@ export function CreateAgentJobDialog({ open, onClose }: Props) {
         return;
       }
       toast.success("ジョブを追加しました");
+      // PAT 経由の GitHub Actions 起動が失敗した場合は警告 toast を別途出す
+      if (r.dispatchWarning) {
+        toast.error(r.dispatchWarning);
+      }
       onClose();
       router.push(`/admin/articles/agent/${r.data.jobId}`);
       router.refresh();

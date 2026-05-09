@@ -10,6 +10,7 @@ import {
   isAnotherJobActive,
   runDrainJob,
 } from "@/lib/articles/agent/drain-runner";
+import { triggerNextChain } from "@/lib/articles/agent/chain";
 import {
   computeJobScopePreview,
   listAgentJobs as listAgentJobsRead,
@@ -310,6 +311,16 @@ export async function createAgentJob(
       console.log(
         `[createAgentJob:after] drained jobs=${result.jobs} lastFinalized=${result.lastResult?.finalized ?? "n/a"}`
       );
+      // 4 分予算で処理しきれず pending が残っているなら、自分自身に
+      // チェーンを起動して連続処理を継続する（cron 待ち回避）。
+      if (
+        result.lastResult &&
+        !result.lastResult.finalized &&
+        !result.lastResult.paused &&
+        result.lastResult.remainingPending > 0
+      ) {
+        await triggerNextChain({ jobId, depth: 0 });
+      }
     } catch (e) {
       console.warn(
         `[createAgentJob:after] drain failed: ${(e as Error).message}`
@@ -585,12 +596,20 @@ export async function resumeAgentJob(
       try {
         const sbAfter = createSupabaseAdminClient();
         if (await isAnotherJobActive(sbAfter, jobId)) return;
-        await drainUntilBudgetOut(sbAfter, {
+        const result = await drainUntilBudgetOut(sbAfter, {
           maxMinutes: 4,
           concurrency: 1,
           runId: `vercel-resume-${Date.now().toString(36)}`,
           verbose: false,
         });
+        if (
+          result.lastResult &&
+          !result.lastResult.finalized &&
+          !result.lastResult.paused &&
+          result.lastResult.remainingPending > 0
+        ) {
+          await triggerNextChain({ jobId, depth: 0 });
+        }
       } catch (e) {
         console.warn(
           `[resumeAgentJob:after] drain failed: ${(e as Error).message}`
@@ -708,7 +727,7 @@ export async function dispatchAgentJob(
       const sbAfter = createSupabaseAdminClient();
       // 別のジョブが走っている場合は直列ポリシーを尊重して何もしない
       if (await isAnotherJobActive(sbAfter, jobId)) return;
-      await runDrainJob({
+      const result = await runDrainJob({
         sb: sbAfter,
         jobId,
         maxMinutes: 4,
@@ -716,6 +735,13 @@ export async function dispatchAgentJob(
         runId: `vercel-dispatch-${Date.now().toString(36)}`,
         verbose: false,
       });
+      if (
+        !result.finalized &&
+        !result.paused &&
+        result.remainingPending > 0
+      ) {
+        await triggerNextChain({ jobId, depth: 0 });
+      }
     } catch (e) {
       console.warn(
         `[dispatchAgentJob:after] drain failed: ${(e as Error).message}`

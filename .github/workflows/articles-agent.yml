@@ -52,6 +52,10 @@ jobs:
           AGENT_JOB_ID: ${{ inputs.job_id }}
           AGENT_MAX_MINUTES: ${{ inputs.max_minutes }}
           AGENT_CONCURRENCY: ${{ inputs.concurrency }}
+          # 5h 予算切れ時の自己再ディスパッチに必要。secrets に PAT が無ければ
+          # cron が後で拾うフォールバック動作になる。
+          GH_AGENT_DISPATCH_TOKEN: ${{ secrets.GH_AGENT_DISPATCH_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           if [ -z "${AGENT_JOB_ID:-}" ]; then
             echo "→ auto-drain mode (cron pickup)"

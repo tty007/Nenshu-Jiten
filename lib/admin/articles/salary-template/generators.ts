@@ -442,7 +442,10 @@ async function callOpenAi(args: {
   const maxAttempts = 4;
   // 1 リクエストあたりの最大待ち時間。OpenAI が応答を返さずハングする現象が
   // たまにあるので、必ず AbortController で打ち切るようにしている。
-  const REQUEST_TIMEOUT_MS = 90_000;
+  // FAQ セクション (§4.12) など max_output_tokens=3500 の長文生成は
+  // gpt-4o-mini でも 60〜120 秒かかることがあるので、タイムアウトは
+  // 余裕を持たせる必要がある。短すぎるとリトライ地獄に陥り体感が極端に遅くなる。
+  const REQUEST_TIMEOUT_MS = 180_000;
   let lastErr = "";
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const ac = new AbortController();

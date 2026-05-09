@@ -107,6 +107,75 @@ async function main() {
         );
       }
     }
+  } else if (result.remainingPending > 0 && !result.paused) {
+    // 予算切れだがまだ pending が残っている場合、自分自身を再ディスパッチして
+    // 次の 5h 枠で続行する。PAT が無ければスキップ（30 分後の cron が拾う）。
+    await selfRedispatch(args.jobId, args.maxMinutes, args.concurrency);
+  }
+}
+
+/**
+ * GitHub REST API で articles-agent.yml を再起動する。
+ * GH_AGENT_DISPATCH_TOKEN が無ければ何もしない（cron が後で拾う）。
+ *
+ * 通常の workflow_dispatch では実行中の workflow から自分自身を起動する制限が
+ * 緩い（実行中グループ articles-agent-<jobId> がキューに新ランを積む）ので、
+ * このまま 5h 切れ直後にトリガーしても OK。
+ */
+async function selfRedispatch(
+  jobId: string,
+  maxMinutes: number,
+  concurrency: number
+): Promise<void> {
+  const token = process.env.GH_AGENT_DISPATCH_TOKEN;
+  if (!token) {
+    console.log(
+      "[drain-job] self-redispatch skipped: GH_AGENT_DISPATCH_TOKEN not set"
+    );
+    return;
+  }
+  const repo =
+    process.env.GITHUB_REPOSITORY ??
+    (process.env.GITHUB_REPO_OWNER && process.env.GITHUB_REPO_NAME
+      ? `${process.env.GITHUB_REPO_OWNER}/${process.env.GITHUB_REPO_NAME}`
+      : null);
+  if (!repo) {
+    console.warn("[drain-job] self-redispatch: repo info not resolvable");
+    return;
+  }
+  const ref = process.env.GH_AGENT_DISPATCH_REF ?? "main";
+  const url = `https://api.github.com/repos/${repo}/actions/workflows/articles-agent.yml/dispatches`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ref,
+        inputs: {
+          job_id: jobId,
+          max_minutes: String(maxMinutes),
+          concurrency: String(concurrency),
+        },
+      }),
+    });
+    if (res.status === 204) {
+      console.log(`[drain-job] self-redispatch ok (jobId=${jobId})`);
+    } else {
+      const body = await res.text().catch(() => "");
+      console.warn(
+        `[drain-job] self-redispatch failed: ${res.status} ${body.slice(0, 200)}`
+      );
+    }
+  } catch (e) {
+    console.warn(
+      `[drain-job] self-redispatch error: ${(e as Error).message}`
+    );
   }
 }
 

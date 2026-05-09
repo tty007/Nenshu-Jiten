@@ -32,12 +32,12 @@ export async function listAuthorsForAdmin(): Promise<ArticleAuthor[]> {
 
 /** エディタの著者セレクタ用：active のみの軽量データ */
 export async function listAuthorsForSelector(): Promise<
-  Pick<ArticleAuthor, "id" | "name" | "title" | "avatar_url">[]
+  Pick<ArticleAuthor, "id" | "slug" | "name" | "title" | "avatar_url">[]
 > {
   const sb = createSupabaseAdminClient();
   const res = await sb
     .from("article_authors")
-    .select("id, name, title, avatar_url")
+    .select("id, slug, name, title, avatar_url")
     .eq("is_active", true)
     .order("display_order", { ascending: true })
     .order("name", { ascending: true });

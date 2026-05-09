@@ -1,5 +1,6 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { resolveDefaultAuthorId } from "@/lib/articles/agent/default-author";
 
 export type ArticleStatus = "draft" | "published" | "archived";
 
@@ -8,6 +9,12 @@ export type ArticleStatus = "draft" | "published" | "archived";
  * Server Component の render 中から直接呼べる（/admin/articles/new など）。
  *
  * Server Action からも actions.ts の createArticle が薄ラッパとして利用する。
+ *
+ * authorId の挙動:
+ *   - undefined（省略）: デフォルト著者（年収辞典編集部 slug='editorial'）を引いて使う。
+ *     見つからなければ null。
+ *   - null: 明示的に著者なし。
+ *   - string: その UUID（article_authors.id）を使う。article_authors 上に存在しないと FK 違反。
  */
 export async function createArticleRecord(opts: {
   authorId?: string | null;
@@ -15,8 +22,13 @@ export async function createArticleRecord(opts: {
 }): Promise<{ id: string } | { error: string }> {
   const sb = createSupabaseAdminClient();
 
-  // author_id は article_authors テーブルへの FK。
-  // 作成時は未設定とし、エディタの AuthorSelector から明示的に紐付ける運用。
+  // author_id は article_authors への FK。
+  // auth.users.id を入れると FK 違反になるので注意（過去にバグの原因になった）。
+  const authorId =
+    opts.authorId === undefined
+      ? await resolveDefaultAuthorId(sb)
+      : opts.authorId;
+
   const ins = await sb
     .from("articles")
     .insert({
@@ -24,7 +36,7 @@ export async function createArticleRecord(opts: {
       body_html: "",
       body_json: null,
       status: "draft",
-      author_id: opts.authorId ?? null,
+      author_id: authorId,
     })
     .select("id")
     .single();

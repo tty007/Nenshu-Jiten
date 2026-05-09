@@ -1,6 +1,5 @@
 import { redirect, notFound } from "next/navigation";
 import { createArticleRecord } from "@/lib/admin/articles/get-articles";
-import { getCurrentUser } from "@/lib/auth/get-user";
 import { isCurrentUserAdmin } from "@/lib/auth/is-admin";
 
 export const metadata = { title: "新規記事作成" };
@@ -11,6 +10,9 @@ export const dynamic = "force-dynamic";
  *
  * 空 draft を作成して即 /admin/articles/[id] にリダイレクト。
  * companyId クエリで初期紐付け企業を渡せる（モーダルから遷移する想定）。
+ *
+ * 著者は createArticleRecord 側で「年収辞典編集部 (slug='editorial')」を
+ * デフォルトとして自動セット（authorId を渡さない）。
  *
  * 注意: render 中は revalidatePath を呼べない（Next.js のルール）。
  * 直後に redirect するので revalidate 不要のため、Server Action ではなく
@@ -24,8 +26,6 @@ export default async function NewArticlePage({
   const allowed = await isCurrentUserAdmin();
   if (!allowed) notFound();
 
-  const user = await getCurrentUser();
-
   const sp = await searchParams;
   const raw = sp.companyId;
   const initialCompanyIds: string[] = Array.isArray(raw)
@@ -35,7 +35,6 @@ export default async function NewArticlePage({
     : [];
 
   const result = await createArticleRecord({
-    authorId: user?.id ?? null,
     initialCompanyIds,
   });
   if ("error" in result) {

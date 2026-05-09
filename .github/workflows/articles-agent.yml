@@ -1,0 +1,65 @@
+name: Articles Agent Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: "agent_jobs.id (UUID)。空にすると自動ピックアップで動く"
+        required: false
+        default: ""
+      max_minutes:
+        description: "ソフト上限（分）。300 推奨、最大 350"
+        required: false
+        default: "300"
+      concurrency:
+        description: "1 ジョブ内の並列ワーカー数（1-3）"
+        required: false
+        default: "1"
+  schedule:
+    # 30 分ごとに自動チェック。queued / 孤児ジョブがあればその場でドレイン。
+    # PAT が無くてもこの cron がフォールバックで pickup する。
+    # 即時起動は createAgentJob 内の after() で Vercel 側が数件分だけ処理する設計。
+    - cron: "*/30 * * * *"
+
+# 同一 job_id への重複ドレインは 1 つに直列化（タスクは claim_next_task で
+# 既に排他制御されているが、無駄な runner を増やさないため）。
+# auto モード（cron 起動）も単一グループで直列化する。
+concurrency:
+  group: articles-agent-${{ github.event.inputs.job_id || 'auto' }}
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install deps
+        run: npm install --legacy-peer-deps
+
+      - name: Drain agent job (or auto pick)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          GH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          AGENT_JOB_ID: ${{ inputs.job_id }}
+          AGENT_MAX_MINUTES: ${{ inputs.max_minutes }}
+          AGENT_CONCURRENCY: ${{ inputs.concurrency }}
+        run: |
+          if [ -z "${AGENT_JOB_ID:-}" ]; then
+            echo "→ auto-drain mode (cron pickup)"
+            npm run -s agent:auto
+          else
+            echo "→ drain job ${AGENT_JOB_ID}"
+            npm run -s agent:drain -- \
+              --jobId="$AGENT_JOB_ID" \
+              --maxMinutes="$AGENT_MAX_MINUTES" \
+              --concurrency="$AGENT_CONCURRENCY"
+          fi

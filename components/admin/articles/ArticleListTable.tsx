@@ -181,12 +181,19 @@ export function ArticleListTable({ rows, total }: Props) {
       </header>
 
 
-      {/* スクロールビュー（sticky thead）：カード装飾なし、上下罫線のみ */}
+      {/* sticky thead。横スクロールは出さず、タイトル列を可変幅にして他列は固定 */}
       <div className="overflow-y-auto lg:max-h-[calc(100vh-18rem)]">
-        <table className="w-full text-sm">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col className="w-10" />
+            <col />{/* タイトル：残り全部 */}
+            <col className="w-28" />
+            <col className="w-52" />
+            <col className="w-24" />
+          </colgroup>
           <thead className="sticky top-0 z-10 bg-white text-left text-[11px] uppercase tracking-wide text-ink-subtle">
             <tr className="border-b border-ink/15">
-              <th className="w-10 whitespace-nowrap px-3 py-2.5">
+              <th className="whitespace-nowrap px-3 py-2.5">
                 <label className="flex h-5 w-5 cursor-pointer items-center justify-center">
                   <input
                     ref={headerCheckRef}
@@ -238,31 +245,32 @@ export function ArticleListTable({ rows, total }: Props) {
                     </label>
                   </td>
                   <td className="px-3 py-2.5 align-top">
-                    <span className="font-medium text-ink">
+                    <div
+                      className="truncate font-medium text-ink"
+                      title={r.title || "（無題）"}
+                    >
                       {r.title || (
                         <span className="text-ink-subtle">（無題）</span>
                       )}
-                    </span>
+                    </div>
                   </td>
-                  <td className="px-3 py-2.5 align-top">
+                  <td className="whitespace-nowrap px-3 py-2.5 align-top">
                     <StatusTag status={r.status} />
                   </td>
                   <td className="px-3 py-2.5 align-top">
                     {r.companies.length === 0 ? (
                       <span className="text-xs text-ink-subtle">-</span>
                     ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {r.companies.slice(0, 3).map((c) => (
-                          <span
-                            key={c.id}
-                            className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs text-ink"
-                          >
-                            {c.name}
-                          </span>
-                        ))}
-                        {r.companies.length > 3 && (
-                          <span className="text-xs text-ink-subtle">
-                            +{r.companies.length - 3}
+                      <div
+                        className="flex items-center gap-1"
+                        title={r.companies.map((c) => c.name).join(", ")}
+                      >
+                        <span className="inline-flex min-w-0 flex-1 items-center truncate rounded-full bg-surface-muted px-2 py-0.5 text-xs text-ink">
+                          {r.companies[0].name}
+                        </span>
+                        {r.companies.length > 1 && (
+                          <span className="shrink-0 whitespace-nowrap text-xs text-ink-subtle">
+                            +{r.companies.length - 1}
                           </span>
                         )}
                       </div>
@@ -352,11 +360,16 @@ function StatusTag({ status }: { status: ArticleRow["status"] }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium",
         STATUS_TONE[status]
       )}
     >
-      <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
+      <span
+        className={cn(
+          "h-1.5 w-1.5 shrink-0 rounded-full",
+          STATUS_DOT[status]
+        )}
+      />
       {STATUS_LABEL[status]}
     </span>
   );

@@ -34,10 +34,9 @@ export async function createArticle(opts: {
   const auth = await requireAdmin();
   if (!auth.ok) return auth;
 
-  // article_authors テーブルへの FK 化に伴い、auth.users.id を渡すと
-  // FK 違反になるため、新規記事は author 未設定で作成する。
+  // 著者はデフォルトで「年収辞典編集部」(slug='editorial') が入る。
+  // authorId を渡さないことで createArticleRecord 側がフォールバック解決する。
   const result = await createArticleRecord({
-    authorId: null,
     initialCompanyIds: opts.initialCompanyIds,
   });
   if ("error" in result) return { ok: false, error: result.error };

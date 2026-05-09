@@ -12,6 +12,7 @@ import { usePathname } from "next/navigation";
 import {
   ArrowLeft,
   BarChart3,
+  Bot,
   Building2,
   ChevronsRight,
   FileText,
@@ -55,6 +56,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/users", label: "ユーザー", icon: <Users className="h-4 w-4" /> },
   { href: "/admin/companies", label: "企業リスト", icon: <Building2 className="h-4 w-4" /> },
   { href: "/admin/articles", label: "記事一覧", icon: <FileText className="h-4 w-4" /> },
+  { href: "/admin/articles/agent", label: "記事制作エージェント", icon: <Bot className="h-4 w-4" /> },
   { href: "/admin/articles/authors", label: "著者管理", icon: <Users className="h-4 w-4" /> },
   { href: "/admin/articles/categories", label: "カテゴリ管理", icon: <FolderTree className="h-4 w-4" /> },
 ];

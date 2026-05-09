@@ -39,6 +39,8 @@ const TEMPLATES: Template[] = [
 type Props = {
   articleId: string;
   companies: CompanyChip[];
+  /** 既に記事に設定されている著者 id（テンプレ反映の初期値に使う） */
+  initialAuthorId?: string | null;
   onInsert: (html: string) => void;
   onInsertAtCursor?: (html: string) => void;
   onReplace: (html: string) => void;
@@ -46,6 +48,8 @@ type Props = {
   onApplyTitle?: (title: string) => void;
   /** カテゴリ自動セット（slug 指定） */
   onApplyCategoryBySlug?: (slugPath: string) => Promise<void> | void;
+  /** 著者自動セット（id 指定。null は未設定にリセット） */
+  onApplyAuthor?: (authorId: string | null) => Promise<void> | void;
   /** 紐付き企業の最新有報を articles に自動リンク */
   onAutoLinkXbrlDocs?: () => Promise<void> | void;
 };
@@ -53,11 +57,13 @@ type Props = {
 export function RightSidebar({
   articleId,
   companies,
+  initialAuthorId,
   onInsert,
   onInsertAtCursor,
   onReplace,
   onApplyTitle,
   onApplyCategoryBySlug,
+  onApplyAuthor,
   onAutoLinkXbrlDocs,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -187,11 +193,13 @@ export function RightSidebar({
           onClose={() => setActiveTemplate(null)}
           articleId={articleId}
           company={companies[0] ?? null}
+          initialAuthorId={initialAuthorId}
           onInsert={onInsert}
           onInsertAtCursor={onInsertAtCursor}
           onReplace={onReplace}
           onApplyTitle={onApplyTitle}
           onApplyCategoryBySlug={onApplyCategoryBySlug}
+          onApplyAuthor={onApplyAuthor}
           onAutoLinkXbrlDocs={onAutoLinkXbrlDocs}
           onAfterApply={() => setOpen(false)}
         />

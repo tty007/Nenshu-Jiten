@@ -38,6 +38,19 @@ function toBigYen(yen: number | null | undefined): string {
   return `${yen.toLocaleString("ja-JP")} 円`;
 }
 
+/**
+ * toBigYen の整数丸め版。§4.9（業績と年収の関係）など、
+ * 「12 億円」「3,500 万円」のように小数点を出さないで欲しい場面で使う。
+ */
+function toBigYenInt(yen: number | null | undefined): string {
+  if (yen == null || !Number.isFinite(yen)) return "—";
+  if (Math.abs(yen) >= 1_0000_0000)
+    return `${Math.round(yen / 1_0000_0000).toLocaleString("ja-JP")} 億円`;
+  if (Math.abs(yen) >= 10000)
+    return `${Math.round(yen / 10000).toLocaleString("ja-JP")} 万円`;
+  return `${Math.round(yen).toLocaleString("ja-JP")} 円`;
+}
+
 function formatNumber(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toLocaleString("ja-JP");
@@ -83,6 +96,79 @@ function markText(html: string): string {
  */
 function wrapMemberOnly(innerHtml: string): string {
   return `<div data-member-only="true" class="member-only">\n${innerHtml}\n</div>`;
+}
+
+/**
+ * 代表者文字列の正規化。
+ *
+ * XBRL 由来の `companies.representative` は「代表取締役社長 山田 太郎」「山田 太郎
+ * 代表取締役社長」「山田 太郎（代表取締役社長）」など揺れがあるので、
+ * 肩書きと前後の空白・括弧書きを除去して氏名だけを残す。
+ * 氏名内の姓名間スペースは保持する（"山田 太郎" などの自然表記）。
+ *
+ * 一致した肩書きが無ければ trim だけして返す。
+ */
+function cleanRepresentative(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let s = String(raw).replace(/[　\s]+/gu, " ").trim();
+  if (!s) return null;
+
+  // 末尾のカッコ書き（"山田 太郎（代表取締役社長）"）を剥がす
+  s = s.replace(/\s*[（(][^（()）]*[)）]$/u, "").trim();
+
+  // 長い肩書きを優先してマッチさせるため長さ降順
+  const titles = [
+    "代表取締役社長兼CEO",
+    "代表取締役会長兼CEO",
+    "代表取締役副社長",
+    "代表取締役社長",
+    "代表取締役会長",
+    "代表執行役社長",
+    "代表執行役会長",
+    "取締役副社長",
+    "取締役社長",
+    "取締役会長",
+    "代表取締役",
+    "代表執行役",
+    "執行役員",
+    "代表理事",
+    "副会長",
+    "副社長",
+    "理事長",
+    "取締役",
+    "執行役",
+    "社長",
+    "会長",
+    "CEO",
+    "COO",
+    "CFO",
+  ].sort((a, b) => b.length - a.length);
+
+  // 先頭の肩書きを剥がす（複数連続にも対応）
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const t of titles) {
+      if (s.startsWith(t)) {
+        s = s.slice(t.length).replace(/^[\s,、・／/]+/u, "").trim();
+        changed = true;
+        break;
+      }
+    }
+  }
+  // 末尾の肩書きを剥がす（複数連続にも対応）
+  changed = true;
+  while (changed) {
+    changed = false;
+    for (const t of titles) {
+      if (s.endsWith(t)) {
+        s = s.slice(0, -t.length).replace(/[\s,、・／/]+$/u, "").trim();
+        changed = true;
+        break;
+      }
+    }
+  }
+  return s || null;
 }
 
 // =====================================================================
@@ -132,7 +218,7 @@ function genEntityPanel(ctx: SalaryArticleContext): GenerateResult {
     ? `${c.founded_year} 年`
     : null;
   const capitalHtml: string | null =
-    c.capital_stock_yen != null ? toBigYen(c.capital_stock_yen) : null;
+    c.capital_stock_yen != null ? toBigYenInt(c.capital_stock_yen) : null;
   const fiscalMonthHtml: string | null =
     c.fiscal_year_end_month != null
       ? `${c.fiscal_year_end_month} 月`
@@ -166,15 +252,15 @@ function genEntityPanel(ctx: SalaryArticleContext): GenerateResult {
       : "";
   const revenueHtml: string | null =
     latest?.revenue != null
-      ? `${toBigYen(latest.revenue)}${fiscalYearTag}`
+      ? `${toBigYenInt(latest.revenue)}${fiscalYearTag}`
       : null;
   const operatingIncomeHtml: string | null =
     latest?.operating_income != null
-      ? `${toBigYen(latest.operating_income)}${fiscalYearTag}`
+      ? `${toBigYenInt(latest.operating_income)}${fiscalYearTag}`
       : null;
   const ordinaryIncomeHtml: string | null =
     latest?.ordinary_income != null
-      ? `${toBigYen(latest.ordinary_income)}${fiscalYearTag}`
+      ? `${toBigYenInt(latest.ordinary_income)}${fiscalYearTag}`
       : null;
   const employeeCountHtml: string | null =
     latest?.employee_count != null
@@ -188,7 +274,13 @@ function genEntityPanel(ctx: SalaryArticleContext): GenerateResult {
     ["業種", c.industry_name ? escapeHtml(c.industry_name) : null],
     ["本社所在地", c.headquarters ? escapeHtml(c.headquarters) : null],
     ["設立", foundedHtml],
-    ["代表者", c.representative ? escapeHtml(c.representative) : null],
+    [
+      "代表者",
+      (() => {
+        const cleaned = cleanRepresentative(c.representative);
+        return cleaned ? escapeHtml(cleaned) : null;
+      })(),
+    ],
     ["資本金", capitalHtml],
     // ── 直近年度の業績・人員 ──
     ["売上高", revenueHtml],
@@ -348,11 +440,17 @@ async function callOpenAi(args: {
   if (!modelDef) return { ok: false, error: `未知のモデル: ${args.model}` };
 
   const maxAttempts = 4;
+  // 1 リクエストあたりの最大待ち時間。OpenAI が応答を返さずハングする現象が
+  // たまにあるので、必ず AbortController で打ち切るようにしている。
+  const REQUEST_TIMEOUT_MS = 90_000;
   let lastErr = "";
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), REQUEST_TIMEOUT_MS);
     try {
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
+        signal: ac.signal,
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
@@ -406,12 +504,20 @@ async function callOpenAi(args: {
       }
       return { ok: false, error: lastErr };
     } catch (e) {
-      lastErr = (e as Error).message ?? String(e);
+      const err = e as Error;
+      // AbortController で打ち切られたケースは判別しやすいメッセージに置き換える
+      if (err.name === "AbortError" || /aborted/i.test(err.message ?? "")) {
+        lastErr = `OpenAI request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`;
+      } else {
+        lastErr = err.message ?? String(err);
+      }
       if (attempt < maxAttempts) {
         await sleep(2 ** attempt * 1000);
         continue;
       }
       return { ok: false, error: lastErr };
+    } finally {
+      clearTimeout(timer);
     }
   }
   return { ok: false, error: lastErr || "OpenAI: max retries exceeded" };
@@ -706,9 +812,9 @@ async function genYoyPerformance(
       (m) => `<tr>
   <td>${m.fiscal_year} 年度</td>
   <td>${toManYen(m.average_annual_salary)}</td>
-  <td>${toBigYen(m.revenue)}</td>
-  <td>${toBigYen(m.operating_income)}</td>
-  <td>${toBigYen(m.net_income)}</td>
+  <td>${toBigYenInt(m.revenue)}</td>
+  <td>${toBigYenInt(m.operating_income)}</td>
+  <td>${toBigYenInt(m.net_income)}</td>
 </tr>`
     )
     .join("");
@@ -727,9 +833,9 @@ ${last5
     (m) =>
       `- ${m.fiscal_year}: 年収 ${toManYen(
         m.average_annual_salary
-      )} / 売上 ${toBigYen(m.revenue)} / 営業利益 ${toBigYen(
+      )} / 売上 ${toBigYenInt(m.revenue)} / 営業利益 ${toBigYenInt(
         m.operating_income
-      )} / 純利益 ${toBigYen(m.net_income)}`
+      )} / 純利益 ${toBigYenInt(m.net_income)}`
   )
   .join("\n")}
 
@@ -737,6 +843,7 @@ ${last5
 - 売上や営業利益の動きと、平均年収の動きが連動しているかどうかを観察として記述
 - 連動していない場合は「業績と賃金は短期では一致しない」点に触れる
 - 因果関係は断定しない（観察にとどめる）
+- 金額は与えられた整数表記（「○○億円」「○○万円」）のまま使い、小数点以下の桁を勝手に増やさない
 
 <p> タグの段落のみで返してください。見出しは付けない。`;
 
@@ -1502,15 +1609,10 @@ export function buildSalaryTitle(ctx: SalaryArticleContext): SalaryTitleResult {
   const { company, history } = ctx;
   const latest = history[0];
   const avgYen = latest?.average_annual_salary ?? null;
-  const fiscalYear = latest?.fiscal_year ?? null;
 
-  // 「最新」表記用の年：直近データが当年/前年なら fiscal_year、それより古ければ当年
+  // 「最新」表記用の年：常に「実行時点の今年」を使う（記事更新タイミングを表す）
   const now = new Date();
-  const currentYear = now.getFullYear();
-  const year =
-    fiscalYear != null && fiscalYear >= currentYear - 1
-      ? fiscalYear
-      : currentYear;
+  const year = now.getFullYear();
 
   const avgMan =
     avgYen != null && Number.isFinite(avgYen)

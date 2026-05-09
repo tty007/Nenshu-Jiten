@@ -33,6 +33,7 @@ import {
   listArticleXbrlDocs,
   type ArticleXbrlDocChip,
 } from "@/lib/admin/articles/xbrl-actions";
+import { setArticleAuthor } from "@/lib/admin/articles/author-actions";
 
 type Props = {
   articleId: string;
@@ -97,13 +98,20 @@ export function ArticleEditor({
   const [savedAt, setSavedAt] = useState<string>(updatedAt);
   const [slug, setSlug] = useState<string | null>(initialSlug);
   const [metaOpen, setMetaOpen] = useState<boolean>(true);
+  // パネルが完全に開いた後（アニメ終了後）のみ true。
+  // overflow-hidden を解除して内部のドロップダウン (AuthorSelector / CategorySelector 等) が
+  // 親の枠外まで降りられるようにするためのフラグ。
+  const [metaSettled, setMetaSettled] = useState<boolean>(true);
   // メタ情報パネルの開閉を localStorage に保存
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(
         "admin-article-meta-open"
       );
-      if (stored === "0") setMetaOpen(false);
+      if (stored === "0") {
+        setMetaOpen(false);
+        setMetaSettled(false);
+      }
     } catch {
       /* noop */
     }
@@ -117,6 +125,12 @@ export function ArticleEditor({
     } catch {
       /* noop */
     }
+    // 開閉アニメ (300ms) が終わってから overflow を解除／適用する
+    if (metaOpen) {
+      const t = window.setTimeout(() => setMetaSettled(true), 320);
+      return () => window.clearTimeout(t);
+    }
+    setMetaSettled(false);
   }, [metaOpen]);
   const [categorySlugPath, setCategorySlugPath] = useState<string | null>(
     initialCategory?.slug_path ?? null
@@ -394,7 +408,7 @@ export function ArticleEditor({
             )}
             aria-hidden={!metaOpen}
           >
-            <div className="overflow-hidden">
+            <div className={metaSettled ? "overflow-visible" : "overflow-hidden"}>
               <div className="space-y-3 pb-6">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 <span className="flex w-24 shrink-0 items-center justify-center self-stretch border-r border-surface-border px-2 py-1 text-sm font-semibold tracking-wide text-ink-muted">
@@ -500,6 +514,7 @@ export function ArticleEditor({
       <RightSidebar
         articleId={articleId}
         companies={companies}
+        initialAuthorId={initialAuthor?.id ?? null}
         onInsert={(html) => {
           editorHandleRef.current?.appendContent(html);
         }}
@@ -529,6 +544,16 @@ export function ArticleEditor({
           }
           setCategorySlugPath(cat.slug_path);
           setForcedCategory(cat);
+        }}
+        onApplyAuthor={async (authorId) => {
+          const res = await setArticleAuthor(articleId, authorId);
+          if (!res.ok) {
+            toast.error(`著者自動設定失敗: ${res.error}`);
+            return;
+          }
+          // ArticleEditor 側の AuthorSelector は initialAuthorId を受け取るのみで
+          // 反映後の同期は次回再レンダーに委ねる（Next.js のキャッシュ revalidate により
+          // 編集画面に戻った際に最新が表示される）
         }}
         onAutoLinkXbrlDocs={async () => {
           const res = await autoLinkXbrlDocsForArticle(articleId);

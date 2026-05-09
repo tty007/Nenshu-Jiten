@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertCircle,
@@ -23,8 +23,9 @@ import {
 import {
   generateSalarySection,
   generateSalaryTitle,
-  getSalaryDataSourceMeta,
+  getSalaryDialogOpenMeta,
   type SalaryDataSourceMeta,
+  type SalarySalaryAvailability,
 } from "@/lib/admin/articles/salary-template/actions";
 import type { SalaryTitleResult } from "@/lib/admin/articles/salary-template/generators";
 import {
@@ -33,6 +34,7 @@ import {
   SALARY_TOTAL_EST_COST_USD,
   type SalarySectionDef,
 } from "@/lib/admin/articles/salary-template/sections";
+import { listAuthorsForSelectorClient } from "@/lib/admin/articles/author-client";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { CompanyChip } from "./CompanySelector";
@@ -51,6 +53,8 @@ type Props = {
   onClose: () => void;
   articleId: string;
   company: CompanyChip | null;
+  /** 既に記事に設定されている著者 id（モーダル初期選択に使う） */
+  initialAuthorId?: string | null;
   /** エディタ末尾に追記（フッターの「末尾に追記」ボタン用） */
   onInsert: (html: string) => void;
   /** エディタの現在カーソル位置に挿入（個別セクションの「挿入」ボタン用） */
@@ -64,6 +68,11 @@ type Props = {
    * 親側で setArticleCategory + UI 更新まで責任を持つ。
    */
   onApplyCategoryBySlug?: (slugPath: string) => Promise<void> | void;
+  /**
+   * 一括反映時に著者を id でセット（null は未設定にリセット）。
+   * 親側で setArticleAuthor + UI 更新まで責任を持つ。
+   */
+  onApplyAuthor?: (authorId: string | null) => Promise<void> | void;
   /** エディタへ反映成功直後に呼ばれる（テンプレウィジェットを畳むなど） */
   onAfterApply?: () => void;
   /**
@@ -71,6 +80,14 @@ type Props = {
    * ArticleEditor 側で autoLinkXbrlDocsForArticle を呼んで、紐付き有報 state を更新する。
    */
   onAutoLinkXbrlDocs?: () => Promise<void> | void;
+};
+
+type AuthorOption = {
+  id: string;
+  slug: string;
+  name: string;
+  title: string | null;
+  avatar_url: string | null;
 };
 
 const KIND_TONE: Record<SalarySectionDef["kind"], string> = {
@@ -115,11 +132,13 @@ export function SalaryTemplateDialog({
   onClose,
   articleId,
   company,
+  initialAuthorId,
   onInsert,
   onInsertAtCursor,
   onReplace,
   onApplyTitle,
   onApplyCategoryBySlug,
+  onApplyAuthor,
   onAfterApply,
   onAutoLinkXbrlDocs,
 }: Props) {
@@ -152,10 +171,21 @@ export function SalaryTemplateDialog({
   const [titleError, setTitleError] = useState<string | null>(null);
   const [includeTitle, setIncludeTitle] = useState(true);
 
+  // 著者選択（反映時に articles.author_id を更新する）
+  const [authors, setAuthors] = useState<AuthorOption[] | null>(null);
+  const [authorsLoading, setAuthorsLoading] = useState(false);
+  const [selectedAuthorId, setSelectedAuthorId] = useState<string | null>(
+    initialAuthorId ?? null
+  );
+  const [includeAuthor, setIncludeAuthor] = useState(true);
+
   // 使用する有報データのメタ情報（モーダルを開いた時に表示）
   const [dataSource, setDataSource] = useState<SalaryDataSourceMeta | null>(null);
   const [dataSourceLoading, setDataSourceLoading] = useState(false);
   const [dataSourceError, setDataSourceError] = useState<string | null>(null);
+  // 平均年収データの可用性（false の時は生成ボタン全体を無効化）
+  const [salaryAvailability, setSalaryAvailability] =
+    useState<SalarySalaryAvailability | null>(null);
 
   // 「エディタに反映」確認モーダル
   const [confirmingApply, setConfirmingApply] = useState(false);
@@ -194,22 +224,74 @@ export function SalaryTemplateDialog({
     return () => window.clearInterval(tid);
   }, [batchProgress?.startedAt, batchProgress?.finished]);
 
-  // ダイアログオープン時にタイトル候補を自動生成（即時・コスト 0）
+  // ダイアログオープン時に「タイトル候補 + 最新有報メタ」を 1 ラウンドトリップで取得。
+  // 以前は generateSalaryTitle と getSalaryDataSourceMeta が独立に
+  // loadSalaryArticleContext（業界平均・ピアまで引く重い SELECT）を 2 回叩いていたが、
+  // getSalaryDialogOpenMeta に統合してオープン時の表示遅延を解消する。
   useEffect(() => {
-    if (!open || !articleId || !company) return;
+    if (!open || !articleId || !company) {
+      setDataSource(null);
+      setDataSourceError(null);
+      setSalaryAvailability(null);
+      return;
+    }
     let cancelled = false;
     setTitleLoading(true);
     setTitleError(null);
-    generateSalaryTitle(articleId).then((res) => {
+    setDataSourceLoading(true);
+    setDataSourceError(null);
+    setSalaryAvailability(null);
+    getSalaryDialogOpenMeta(articleId).then((res) => {
       if (cancelled) return;
       setTitleLoading(false);
-      if (res.ok) setTitleData(res.data);
-      else setTitleError(res.error);
+      setDataSourceLoading(false);
+      if (res.ok) {
+        setTitleData(res.data.title);
+        setDataSource(res.data.dataSource);
+        setSalaryAvailability(res.data.salaryAvailability);
+      } else {
+        setTitleError(res.error);
+        setDataSourceError(res.error);
+      }
     });
     return () => {
       cancelled = true;
     };
   }, [open, articleId, company]);
+
+  // ダイアログオープン時に著者リストを取得し、未設定なら年収辞典編集部 (slug='editorial')
+  // をデフォルト選択にする
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setAuthorsLoading(true);
+    listAuthorsForSelectorClient()
+      .then((rows) => {
+        if (cancelled) return;
+        const opts: AuthorOption[] = rows.map((r) => ({
+          id: r.id,
+          slug: (r as { slug?: string }).slug ?? "",
+          name: r.name,
+          title: r.title ?? null,
+          avatar_url: r.avatar_url ?? null,
+        }));
+        setAuthors(opts);
+        // 既に記事に著者が設定されていればそれを優先、なければ editorial をデフォルトに
+        if (!initialAuthorId) {
+          const editorial = opts.find((a) => a.slug === "editorial");
+          if (editorial) setSelectedAuthorId(editorial.id);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAuthors([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAuthorsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, initialAuthorId]);
 
   const refetchTitle = () => {
     if (!articleId) return;
@@ -221,27 +303,6 @@ export function SalaryTemplateDialog({
       else setTitleError(res.error);
     });
   };
-
-  // 開いたタイミングで「使用する最新有報データ」のメタ情報を取得
-  useEffect(() => {
-    if (!open || !articleId || !company) {
-      setDataSource(null);
-      setDataSourceError(null);
-      return;
-    }
-    let cancelled = false;
-    setDataSourceLoading(true);
-    setDataSourceError(null);
-    getSalaryDataSourceMeta(articleId).then((res) => {
-      if (cancelled) return;
-      setDataSourceLoading(false);
-      if (res.ok) setDataSource(res.data);
-      else setDataSourceError(res.error);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, articleId, company]);
 
   // 統計
   const stats = useMemo(() => {
@@ -425,6 +486,16 @@ export function SalaryTemplateDialog({
         console.warn("auto-apply category failed", e);
       }
     }
+    // 著者を反映（チェック ON 時のみ。null なら未設定にリセット）
+    let authorApplied = false;
+    if (includeAuthor && onApplyAuthor) {
+      try {
+        await onApplyAuthor(selectedAuthorId);
+        authorApplied = true;
+      } catch (e) {
+        console.warn("auto-apply author failed", e);
+      }
+    }
     // 紐付き企業の最新有報を articles に自動リンク
     if (onAutoLinkXbrlDocs) {
       try {
@@ -433,11 +504,14 @@ export function SalaryTemplateDialog({
         console.warn("auto-link xbrl docs failed", e);
       }
     }
-    toast.success(
-      titleApplied
-        ? `タイトル + ${ordered.length} セクション + カテゴリ + 有報リンクでエディタを更新しました`
-        : `${ordered.length} セクション + カテゴリ + 有報リンクでエディタを更新しました`
-    );
+    const parts = [
+      titleApplied ? "タイトル" : null,
+      `${ordered.length} セクション`,
+      "カテゴリ",
+      authorApplied ? "著者" : null,
+      "有報リンク",
+    ].filter(Boolean);
+    toast.success(`${parts.join(" + ")}でエディタを更新しました`);
     setConfirmingApply(false);
     onClose();
     onAfterApply?.();
@@ -516,6 +590,11 @@ export function SalaryTemplateDialog({
           />
         )}
 
+        {/* 平均年収データの可用性に関する注意書き */}
+        {company && salaryAvailability && (
+          <SalaryAvailabilityPanel availability={salaryAvailability} />
+        )}
+
         {/* バッチ進捗バー */}
         {batchProgress && (
           <BatchProgressBar
@@ -539,6 +618,16 @@ export function SalaryTemplateDialog({
             included={includeTitle}
             onToggleInclude={setIncludeTitle}
             onRefetch={refetchTitle}
+          />
+
+          {/* 著者選択パネル */}
+          <AuthorPanel
+            authors={authors}
+            loading={authorsLoading}
+            selectedId={selectedAuthorId}
+            onSelect={setSelectedAuthorId}
+            included={includeAuthor}
+            onToggleInclude={setIncludeAuthor}
           />
 
           {/* 全体ステータス */}
@@ -640,7 +729,8 @@ export function SalaryTemplateDialog({
                         disabled={
                           batchRunning ||
                           r.status === "generating" ||
-                          !company
+                          !company ||
+                          salaryAvailability?.available === false
                         }
                         className={cn(
                           "inline-flex items-center gap-1.5 rounded-md border border-ink/80 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-ink hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-ink"
@@ -709,7 +799,9 @@ export function SalaryTemplateDialog({
           <button
             type="button"
             onClick={handleGenerateAll}
-            disabled={!company || batchRunning}
+            disabled={
+              !company || batchRunning || salaryAvailability?.available === false
+            }
             className="inline-flex items-center gap-1.5 rounded-md border border-ink/80 bg-white px-4 py-2 text-xs font-semibold text-ink transition hover:bg-ink hover:text-white disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-ink"
           >
             {batchRunning ? (
@@ -766,6 +858,219 @@ export function SalaryTemplateDialog({
   );
 
   return createPortal(node, document.body);
+}
+
+// =====================================================================
+// 著者選択パネル
+// 反映時に articles.author_id を更新する。デフォルトは年収辞典編集部 (slug=editorial)。
+// =====================================================================
+
+function AuthorPanel({
+  authors,
+  loading,
+  selectedId,
+  onSelect,
+  included,
+  onToggleInclude,
+}: {
+  authors: AuthorOption[] | null;
+  loading: boolean;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  included: boolean;
+  onToggleInclude: (v: boolean) => void;
+}) {
+  return (
+    <div className="rounded-md border border-surface-border bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="rounded-full bg-positive-50 px-1.5 py-0.5 text-[10px] font-semibold text-positive-700">
+            著者
+          </span>
+          <span className="text-xs text-ink-subtle">
+            反映時に articles.author_id を上書き
+          </span>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-ink-muted">
+          <input
+            type="checkbox"
+            checked={included}
+            onChange={(e) => onToggleInclude(e.target.checked)}
+            className="h-3.5 w-3.5 cursor-pointer"
+          />
+          反映時に上書きする
+        </label>
+      </div>
+
+      <div className="mt-2.5">
+        {loading && (
+          <div className="text-xs text-ink-subtle">著者リストを取得中…</div>
+        )}
+        {!loading && authors && authors.length === 0 && (
+          <div className="text-xs text-ink-subtle">
+            登録された著者がいません
+          </div>
+        )}
+        {!loading && authors && authors.length > 0 && (
+          <AuthorDropdown
+            authors={authors}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            disabled={!included}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 円形アバター（画像 or イニシャル）
+function AuthorAvatar({
+  url,
+  name,
+  size = 24,
+}: {
+  url: string | null;
+  name: string;
+  size?: number;
+}) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-brand-300 via-brand-400 to-brand-600 text-white shadow-inner"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}
+    >
+      {url ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="font-semibold leading-none">{name.slice(0, 1)}</span>
+      )}
+    </span>
+  );
+}
+
+function AuthorDropdown({
+  authors,
+  selectedId,
+  onSelect,
+  disabled,
+}: {
+  authors: AuthorOption[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selected = authors.find((a) => a.id === selectedId) ?? null;
+
+  // 外側クリックで閉じる
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  // disabled になったら開いた状態を強制クローズ
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  return (
+    <div ref={containerRef} className="relative inline-block text-sm">
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={cn(
+          "inline-flex items-center gap-2 rounded-md border bg-white px-2.5 py-1.5 text-sm transition hover:bg-surface-muted/50",
+          disabled
+            ? "cursor-not-allowed border-surface-border bg-surface-muted/40 text-ink-subtle"
+            : open
+            ? "border-brand-500 ring-1 ring-brand-500"
+            : "border-surface-border"
+        )}
+      >
+        {selected ? (
+          <>
+            <AuthorAvatar
+              url={selected.avatar_url}
+              name={selected.name}
+              size={22}
+            />
+            <span className="font-medium text-ink">{selected.name}</span>
+          </>
+        ) : (
+          <span className="text-ink-muted">未設定（著者を表示しない）</span>
+        )}
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-ink-subtle transition",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 z-30 mt-1 max-h-72 w-64 overflow-y-auto rounded-lg border border-surface-border bg-white py-1 shadow-lg"
+        >
+          {/* 未設定オプション */}
+          <button
+            type="button"
+            onClick={() => {
+              onSelect(null);
+              setOpen(false);
+            }}
+            className={cn(
+              "flex w-full items-center justify-between px-3 py-2 text-left text-xs transition hover:bg-surface-muted/40",
+              selectedId === null && "bg-brand-50/50"
+            )}
+          >
+            <span className="text-ink-muted">未設定（著者を表示しない）</span>
+            {selectedId === null && (
+              <Check className="h-3 w-3 text-brand-700" />
+            )}
+          </button>
+          <div className="my-1 border-t border-surface-border" />
+          {authors.map((a) => {
+            const isSelected = a.id === selectedId;
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => {
+                  onSelect(a.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-surface-muted/40",
+                  isSelected && "bg-brand-50/50"
+                )}
+              >
+                <AuthorAvatar url={a.avatar_url} name={a.name} size={24} />
+                <span className="flex-1 truncate text-sm font-medium text-ink">
+                  {a.name}
+                </span>
+                {isSelected && <Check className="h-3 w-3 text-brand-700" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // =====================================================================
@@ -952,6 +1257,52 @@ function Stat({ label, value }: { label: string; value: string }) {
       </div>
       <div className="font-numeric text-sm font-semibold tabular-nums text-ink">
         {value}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// 平均年収データの可用性パネル
+//   - available=false: 赤の警告（生成不可）
+//   - available=true & used_fallback=true: 黄の情報（1 年前データを使用）
+//   - available=true & used_fallback=false: 何も表示しない
+// =====================================================================
+
+function SalaryAvailabilityPanel({
+  availability,
+}: {
+  availability: SalarySalaryAvailability;
+}) {
+  if (availability.available && !availability.used_fallback) return null;
+
+  if (!availability.available) {
+    return (
+      <div className="mx-6 mt-3 flex items-start gap-2 rounded-md border border-negative-50 bg-negative-50 px-3 py-2.5 text-xs text-negative-600">
+        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <div>
+          <div className="font-semibold">記事を生成できません</div>
+          <div className="mt-0.5 text-ink">
+            最新の有価証券報告書および 1 年前の有報のいずれにも平均年収データが
+            掲載されていないため、年収テンプレートでは記事を生成できません。
+            手動で本文を執筆するか、財務指標が揃っている年度の有報が登録された後に
+            再度お試しください。
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // フォールバック使用中
+  return (
+    <div className="mx-6 mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <div>
+        <span className="font-semibold">1 年前のデータを使用します</span>
+        <span className="ml-1">
+          最新の有報に平均年収データが掲載されていないため、1 年前 (FY
+          {availability.fiscal_year_used}) の有報を「最新」として参照します。
+        </span>
       </div>
     </div>
   );

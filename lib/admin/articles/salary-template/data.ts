@@ -75,6 +75,64 @@ export type SalaryArticleContext = {
 };
 
 // =====================================================================
+// 履歴の前処理
+// =====================================================================
+
+/**
+ * 平均年収データが入った行を「最新」として扱える形に history を整える。
+ *
+ *  - history[0].average_annual_salary に値がある → そのまま使える
+ *  - history[0] は null だが history[1] にはある → 先頭を捨てて返す
+ *    （表示上 1 年前の有報が「最新」扱いとなる）
+ *  - 1 年前にもなければ空配列を返す（記事は生成不可）
+ *
+ * セクション生成器は history[0] を「最新」として参照しているので、
+ * 本関数のトリミングを通すだけで「フォールバック有り」と「使える年度」が
+ * 自動的に揃う。
+ */
+export type SalaryHistoryAvailability = {
+  history: SalaryFinancialMetric[];
+  available: boolean;
+  used_fallback: boolean;
+  fiscal_year_used: number | null;
+};
+
+export function findSalaryReadyHistory(
+  history: SalaryFinancialMetric[]
+): SalaryHistoryAvailability {
+  if (history.length === 0) {
+    return {
+      history: [],
+      available: false,
+      used_fallback: false,
+      fiscal_year_used: null,
+    };
+  }
+  if (history[0].average_annual_salary != null) {
+    return {
+      history,
+      available: true,
+      used_fallback: false,
+      fiscal_year_used: history[0].fiscal_year,
+    };
+  }
+  if (history.length >= 2 && history[1].average_annual_salary != null) {
+    return {
+      history: history.slice(1),
+      available: true,
+      used_fallback: true,
+      fiscal_year_used: history[1].fiscal_year,
+    };
+  }
+  return {
+    history: [],
+    available: false,
+    used_fallback: false,
+    fiscal_year_used: null,
+  };
+}
+
+// =====================================================================
 // 取得
 // =====================================================================
 
@@ -226,12 +284,17 @@ export async function loadSalaryArticleContext(
   // 同業界の上位企業（最新年度の平均年収順）
   const peers = await loadPeers(company.industry_code, company.id, PEER_LIMIT);
 
+  // 平均年収データが入った行を最新として扱えるよう history をトリム。
+  // 1 年前にもデータが無ければ history は空配列になり、呼び出し側で
+  // 「生成不可」を判定できる。
+  const trimmed = findSalaryReadyHistory(history);
+
   return {
     ok: true,
     data: {
       article: { id: aRes.data.id, title: aRes.data.title ?? "" },
       company,
-      history,
+      history: trimmed.history,
       industry_averages,
       peers,
     },

@@ -15,22 +15,11 @@ import {
 } from "./schemas";
 import { getCurrentUser } from "./get-user";
 import { recordInitialConsents } from "@/lib/profile/consent-actions";
-import { CONSENT_TYPES, type ConsentType } from "@/lib/profile/consents";
-
-/**
- * フォームのチェック状態を CONSENT_TYPES に揃える同期ヘルパ。
- * "use server" ファイル間で sync export を共有できないため、ここに局所定義する。
- */
-function extractConsentFlagsFromFormData(
-  formData: FormData
-): Partial<Record<ConsentType, boolean>> {
-  const out: Partial<Record<ConsentType, boolean>> = {};
-  for (const type of CONSENT_TYPES) {
-    const v = formData.get(`consent.${type}`);
-    out[type] = v === "on" || v === "true" || v === "1";
-  }
-  return out;
-}
+import {
+  clearPendingConsents,
+  getPendingConsents,
+} from "@/lib/profile/pending-consents";
+import { recordPolicyAcknowledgement } from "@/lib/profile/acknowledge-actions";
 
 export type ActionResult =
   | { ok: true; message?: string; redirectTo?: string }
@@ -91,11 +80,17 @@ export async function signUpWithEmail(
       `/auth/sign-in?email=${encodeURIComponent(parsed.data.email)}&error=email_exists`
     );
   }
-  // 任意の広告配信同意を、フォームのチェック状態のとおり初期登録する。
-  // ここで失敗してもサインアップ自体は通す（同意取得は後からマイページでも可能）。
+  // 任意の広告配信同意を、サインアップ画面でチェックされた内容（pending_consents
+  // Cookie 経由）に従って初期登録する。失敗してもサインアップ自体は通す。
   if (data.user?.id) {
-    const consents = extractConsentFlagsFromFormData(formData);
-    await recordInitialConsents(data.user.id, consents, "signup");
+    const consents = await getPendingConsents();
+    if (Object.keys(consents).length > 0) {
+      await recordInitialConsents(data.user.id, consents, "signup");
+    }
+    await clearPendingConsents();
+    // 規約・ポリシーへの同意は登録ボタン押下＝同意の文面で取得済みのため、
+    // 現行版を確認済みとして即時記録し、次回ログイン時の再同意モーダルを抑止する。
+    await recordPolicyAcknowledgement(data.user.id);
   }
   redirect("/auth/verify-email");
 }

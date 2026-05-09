@@ -25,6 +25,7 @@ import {
   getIndustryAverageHistory,
 } from "@/lib/data/industry-averages";
 import { hasMhlwForCompany } from "@/lib/data/mhlw";
+import { trackCompanyView } from "@/lib/data/track-entity-view";
 import { isFavoritedByCurrentUser } from "@/lib/favorites/get-favorites";
 import {
   diffPercent,
@@ -63,6 +64,10 @@ export default async function CompanyDetailPage({
   const { edinetCode } = await params;
   const company = await getCompanyByEdinetCode(edinetCode);
   if (!company || company.history.length === 0) notFound();
+
+  // PV を fire-and-forget で記録（失敗してもページ描画は継続）。
+  // ボット判定 + Cookie 不要。集計は company_page_views(date, company_id, count)。
+  void trackCompanyView(company.id);
 
   const latest = company.latest;
   const previous =

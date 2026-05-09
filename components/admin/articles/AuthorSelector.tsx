@@ -140,11 +140,11 @@ export function AuthorSelector({
       >
         {authorId && authorName ? (
           <>
-            <AvatarDot url={authorAvatarUrl} name={authorName} size={28} />
-            <span className="text-left leading-tight">
-              <span className="block font-medium text-ink">{authorName}</span>
+            <AvatarDot url={authorAvatarUrl} name={authorName} size={20} />
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-medium text-ink">{authorName}</span>
               {authorTitle && (
-                <span className="block text-[11px] text-ink-subtle">
+                <span className="text-[11px] text-ink-subtle">
                   {authorTitle}
                 </span>
               )}

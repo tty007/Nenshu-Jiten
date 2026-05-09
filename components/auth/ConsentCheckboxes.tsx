@@ -1,16 +1,50 @@
 "use client";
 
-import { CONSENT_META, CONSENT_TYPES } from "@/lib/profile/consents";
+import { useState, useTransition } from "react";
+import {
+  CONSENT_META,
+  CONSENT_TYPES,
+  DEFAULT_CONSENT_STATE,
+  type ConsentType,
+} from "@/lib/profile/consents";
+import { setPendingConsentFlag } from "@/lib/profile/pending-consents-actions";
 
 /**
- * 会員登録フォーム内に挿入する任意同意のチェックボックス群。
+ * サインアップ画面の最上部に配置する「広告配信に関する任意の同意」パネル。
  *
- * - 規約 / プライバシーポリシーへの同意は登録ボタン押下＝同意の文面で別途取得しているため、
- *   ここでは「広告配信・マーケティング系の任意同意」のみを並べる。
- * - すべて任意（規約同意のように必須ではない）。チェックなしでも登録は可能。
- * - submit 後、`name="consent.<type>"` の値を server action 側で抽出する。
+ * チェック変更ごとに server action で `pending_consents` Cookie を更新する。
+ * メール登録・Google OAuth どちらの経路でもサインアップ完了後にこの Cookie を
+ * 読み取り、`user_consents` に反映する。
+ *
+ * - すべて任意。チェックが全部 OFF でも会員登録は可能。
+ * - 同じパネルから後で（マイページ）変更できることを明示。
  */
-export function ConsentCheckboxes() {
+export function ConsentCheckboxes({
+  initial = {},
+}: {
+  initial?: Partial<Record<ConsentType, boolean>>;
+}) {
+  // Cookie に明示の値があれば優先、なければ DEFAULT_CONSENT_STATE
+  // （personalized_ads のみ ON）を採用する。
+  const [state, setState] = useState<Record<ConsentType, boolean>>(() => {
+    const init = {} as Record<ConsentType, boolean>;
+    for (const t of CONSENT_TYPES) {
+      init[t] = typeof initial[t] === "boolean" ? !!initial[t] : DEFAULT_CONSENT_STATE[t];
+    }
+    return init;
+  });
+  const [isPending, startTransition] = useTransition();
+
+  function handleChange(type: ConsentType, next: boolean) {
+    setState((s) => ({ ...s, [type]: next }));
+    const fd = new FormData();
+    fd.set("consentType", type);
+    fd.set("granted", next ? "true" : "false");
+    startTransition(() => {
+      setPendingConsentFlag(fd);
+    });
+  }
+
   return (
     <fieldset className="rounded-xl border border-surface-border bg-surface-soft/50 p-4">
       <legend className="px-1 text-sm font-medium text-ink">
@@ -31,8 +65,10 @@ export function ConsentCheckboxes() {
             >
               <input
                 id={id}
-                name={`consent.${type}`}
                 type="checkbox"
+                checked={state[type]}
+                disabled={isPending}
+                onChange={(e) => handleChange(type, e.currentTarget.checked)}
                 className="mt-0.5 h-4 w-4 rounded border-surface-border text-brand-600 focus:ring-brand/20"
               />
               <span className="min-w-0 flex-1">

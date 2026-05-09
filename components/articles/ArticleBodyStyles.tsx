@@ -324,33 +324,36 @@ html { scroll-behavior: smooth; }
   box-decoration-break: clone;
 }
 
-/* ===== テーブル：横幅 100% を基本に、はみ出したら横スクロール ===== */
-.tiptap-content table,
-.article-body table {
-  display: block;
-  width: 100%;
+/* ===== テーブル：自然な display:table を維持し、ラッパで横スクロール =====
+   公開ページとエディタの両方で、各 <table> を <div class="table-scroll">
+   でラップする運用を前提にしている（公開: lib/article-toc などで前処理、
+   エディタ: TipTap の Table 拡張に NodeView でラッパを付与）。
+   ラッパが overflow-x: auto を持ち、テーブル本体は自然なレイアウトのまま
+   セル内容をはみ出させずに横方向にだけ伸ばす。 */
+.tiptap-content .table-scroll,
+.article-body .table-scroll {
+  margin: 1rem 0;
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  margin: 1rem 0;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-.tiptap-content table::-webkit-scrollbar,
-.article-body table::-webkit-scrollbar { display: none; width: 0; height: 0; }
-.tiptap-content table > thead,
-.tiptap-content table > tbody,
-.tiptap-content table > tfoot,
-.article-body table > thead,
-.article-body table > tbody,
-.article-body table > tfoot {
-  display: table;
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: auto;
+.tiptap-content .table-scroll::-webkit-scrollbar,
+.article-body .table-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
-.tiptap-content table > * > tr,
-.article-body table > * > tr { display: table-row; }
+.tiptap-content table,
+.article-body table {
+  border-collapse: collapse;
+  /* 既定は内容に合わせた幅。コンテンツが少なければ自然に収まり、
+     多ければ親（.table-scroll）が横スクロールする。 */
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+}
 .tiptap-content table th,
 .tiptap-content table td,
 .article-body table th,
@@ -359,6 +362,7 @@ html { scroll-behavior: smooth; }
   padding: 0.6rem 0.7rem;
   vertical-align: top;
   position: relative;
+  /* セル内では折り返さない。長すぎる行は親ラッパが横スクロールで吸収。 */
   white-space: nowrap;
 }
 .tiptap-content table th,
@@ -386,9 +390,9 @@ html { scroll-behavior: smooth; }
   font-weight: 700;
 }
 
-/* テーブル横スクロールヒント（JS で data-scrollable トグル） */
-.tiptap-content table[data-scrollable],
-.article-body table[data-scrollable] { margin-bottom: 0.4rem; }
+/* テーブル横スクロールヒント（JS で .table-scroll に data-scrollable をトグル） */
+.tiptap-content .table-scroll[data-scrollable],
+.article-body .table-scroll[data-scrollable] { margin-bottom: 0.4rem; }
 .table-scroll-hint {
   display: none;
   margin: 0.35rem 0 1rem;

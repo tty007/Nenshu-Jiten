@@ -8,7 +8,6 @@ import {
   SubmitButton,
   TextInput,
 } from "./AuthFormFields";
-import { ConsentCheckboxes } from "./ConsentCheckboxes";
 
 export function SignUpForm() {
   const [state, formAction] = useActionState<ActionResult | null, FormData>(
@@ -62,7 +61,6 @@ export function SignUpForm() {
           autoComplete="new-password"
         />
       </FieldRow>
-      <ConsentCheckboxes />
       {state && !state.ok && <FormMessage error={state.error} />}
       <SubmitButton label="会員登録" pendingLabel="送信中…" />
     </form>

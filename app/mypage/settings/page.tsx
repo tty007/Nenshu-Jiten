@@ -4,7 +4,7 @@ import { UpdatePasswordForm } from "@/components/auth/UpdatePasswordForm";
 import { getCurrentUser } from "@/lib/auth/get-user";
 
 export const metadata = {
-  title: "アカウント設定",
+  title: "メール・パスワード設定",
 };
 
 export default async function SettingsPage() {
@@ -14,10 +14,10 @@ export default async function SettingsPage() {
     <section className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-ink">
-          アカウント設定
+          メール・パスワード設定
         </h1>
         <p className="mt-1 text-sm text-ink-muted">
-          メールアドレス・パスワードの変更や、退会ができます。プロフィール属性の編集はマイページから行えます。
+          メールアドレス・パスワードの変更や、退会ができます。通知・広告配信の設定は左メニューの「通知・広告配信の設定」から行えます。
         </p>
       </div>
 

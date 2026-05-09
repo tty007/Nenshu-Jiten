@@ -3,13 +3,17 @@
 import { useEffect } from "react";
 
 /**
- * 指定セレクタの中にある <table> 要素を走査し、
- * - 内容が表示幅を超えている時だけ data-scrollable 属性を付ける
- * - 直後に「スクロールできます →」のヒント要素（.table-scroll-hint）を一度だけ挿入し、
- *   テーブルの状態に追従して表示/非表示を切り替える
+ * 指定セレクタの中にある <table> を走査し、
+ *  1) 各 <table> を <div class="table-scroll"> でラップ（未ラップ時のみ）
+ *  2) ラッパの scrollWidth > clientWidth なら data-scrollable を付与
+ *  3) ラッパ直後に「スクロールできます →」のヒント要素を 1 度だけ挿入し、
+ *     スクロール可否に応じて表示/非表示を切り替える
  *
  * ResizeObserver + MutationObserver で、リサイズや TipTap の編集に追従。
- * スタイルは TipTapEditor.tsx / preview/page.tsx 側の CSS で定義。
+ *
+ * 注意：ProseMirror が管理する DOM をいじるのは編集系で副作用があり得るため、
+ * エディタ内（TipTap）では Table 拡張側 NodeView でラッパを発行している。
+ * このコンポーネントは「ラッパが既にある場合」「無ければ新規作成」両対応。
  */
 export function TableScrollHint({
   selector,
@@ -29,31 +33,34 @@ export function TableScrollHint({
     const known = new WeakSet<HTMLElement>();
     const observed = new Set<HTMLElement>();
 
-    const ensureHint = (table: HTMLElement): HTMLElement | null => {
-      const next = table.nextElementSibling as HTMLElement | null;
+    const ensureWrapper = (table: HTMLTableElement): HTMLElement => {
+      const parent = table.parentElement;
+      if (parent && parent.classList.contains("table-scroll")) return parent;
+      const wrapper = document.createElement("div");
+      wrapper.className = "table-scroll";
+      table.insertAdjacentElement("beforebegin", wrapper);
+      wrapper.appendChild(table);
+      return wrapper;
+    };
+
+    const ensureHint = (wrapper: HTMLElement): HTMLElement => {
+      const next = wrapper.nextElementSibling as HTMLElement | null;
       if (next && next.classList.contains("table-scroll-hint")) return next;
       const hint = document.createElement("div");
       hint.className = "table-scroll-hint";
       hint.setAttribute("aria-hidden", "true");
       hint.innerHTML = `<span>${hintText}</span><span class="table-scroll-hint__arrow">→</span>`;
-      table.insertAdjacentElement("afterend", hint);
+      wrapper.insertAdjacentElement("afterend", hint);
       return hint;
     };
 
-    const evaluate = (table: HTMLElement) => {
-      const isScrollable = table.scrollWidth > table.clientWidth + 1;
-      if (isScrollable) {
-        table.setAttribute("data-scrollable", "");
-      } else {
-        table.removeAttribute("data-scrollable");
-      }
-      const hint = ensureHint(table);
-      if (!hint) return;
-      if (isScrollable) {
-        hint.setAttribute("data-scrollable", "");
-      } else {
-        hint.removeAttribute("data-scrollable");
-      }
+    const evaluate = (wrapper: HTMLElement) => {
+      const isScrollable = wrapper.scrollWidth > wrapper.clientWidth + 1;
+      if (isScrollable) wrapper.setAttribute("data-scrollable", "");
+      else wrapper.removeAttribute("data-scrollable");
+      const hint = ensureHint(wrapper);
+      if (isScrollable) hint.setAttribute("data-scrollable", "");
+      else hint.removeAttribute("data-scrollable");
     };
 
     const ro = new ResizeObserver((entries) => {
@@ -62,16 +69,17 @@ export function TableScrollHint({
 
     const scan = () => {
       for (const c of containers) {
-        c.querySelectorAll<HTMLElement>("table").forEach((tbl) => {
-          if (!known.has(tbl)) {
-            known.add(tbl);
-            ensureHint(tbl);
+        c.querySelectorAll<HTMLTableElement>("table").forEach((tbl) => {
+          const wrapper = ensureWrapper(tbl);
+          if (!known.has(wrapper)) {
+            known.add(wrapper);
+            ensureHint(wrapper);
           }
-          if (!observed.has(tbl)) {
-            observed.add(tbl);
-            ro.observe(tbl);
+          if (!observed.has(wrapper)) {
+            observed.add(wrapper);
+            ro.observe(wrapper);
           }
-          evaluate(tbl);
+          evaluate(wrapper);
         });
       }
     };

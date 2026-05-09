@@ -76,6 +76,14 @@ export type ArticleDetail = {
     industry_name: string | null;
     display_order: number;
   }>;
+  xbrl_documents: Array<{
+    doc_id: string;
+    edinet_code: string | null;
+    fiscal_year: number | null;
+    submitted_at: string | null;
+    filer_name: string | null;
+    display_order: number;
+  }>;
 };
 
 /**
@@ -188,6 +196,25 @@ export async function getArticleDetail(
     };
   });
 
+  // 紐付き有報書類
+  const xRes = await sb
+    .from("article_xbrl_documents")
+    .select(
+      "doc_id, edinet_code, fiscal_year, submitted_at, filer_name, display_order"
+    )
+    .eq("article_id", id)
+    .order("display_order", { ascending: true })
+    .order("submitted_at", { ascending: false });
+  if (xRes.error) throw xRes.error;
+  const xbrl_documents = (xRes.data ?? []).map((r: any) => ({
+    doc_id: r.doc_id as string,
+    edinet_code: (r.edinet_code ?? null) as string | null,
+    fiscal_year: (r.fiscal_year ?? null) as number | null,
+    submitted_at: (r.submitted_at ?? null) as string | null,
+    filer_name: (r.filer_name ?? null) as string | null,
+    display_order: (r.display_order ?? 0) as number,
+  }));
+
   return {
     id: aRes.data.id as string,
     title: (aRes.data.title ?? "") as string,
@@ -200,6 +227,7 @@ export async function getArticleDetail(
     created_at: aRes.data.created_at as string,
     updated_at: aRes.data.updated_at as string,
     companies,
+    xbrl_documents,
   };
 }
 

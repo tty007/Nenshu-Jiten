@@ -7,6 +7,8 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
+  FileText,
   Loader2,
   RotateCw,
   Sparkles,
@@ -21,6 +23,8 @@ import {
 import {
   generateSalarySection,
   generateSalaryTitle,
+  getSalaryDataSourceMeta,
+  type SalaryDataSourceMeta,
 } from "@/lib/admin/articles/salary-template/actions";
 import type { SalaryTitleResult } from "@/lib/admin/articles/salary-template/generators";
 import {
@@ -62,6 +66,11 @@ type Props = {
   onApplyCategoryBySlug?: (slugPath: string) => Promise<void> | void;
   /** エディタへ反映成功直後に呼ばれる（テンプレウィジェットを畳むなど） */
   onAfterApply?: () => void;
+  /**
+   * テンプレ反映直後に「使用した有報書類」を articles に自動リンクする callback。
+   * ArticleEditor 側で autoLinkXbrlDocsForArticle を呼んで、紐付き有報 state を更新する。
+   */
+  onAutoLinkXbrlDocs?: () => Promise<void> | void;
 };
 
 const KIND_TONE: Record<SalarySectionDef["kind"], string> = {
@@ -112,6 +121,7 @@ export function SalaryTemplateDialog({
   onApplyTitle,
   onApplyCategoryBySlug,
   onAfterApply,
+  onAutoLinkXbrlDocs,
 }: Props) {
   const [mountedDom, setMountedDom] = useState(false);
   const [model] = useState<AiModelId>("gpt-4o-mini");
@@ -141,6 +151,11 @@ export function SalaryTemplateDialog({
   const [titleLoading, setTitleLoading] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [includeTitle, setIncludeTitle] = useState(true);
+
+  // 使用する有報データのメタ情報（モーダルを開いた時に表示）
+  const [dataSource, setDataSource] = useState<SalaryDataSourceMeta | null>(null);
+  const [dataSourceLoading, setDataSourceLoading] = useState(false);
+  const [dataSourceError, setDataSourceError] = useState<string | null>(null);
 
   // 「エディタに反映」確認モーダル
   const [confirmingApply, setConfirmingApply] = useState(false);
@@ -206,6 +221,27 @@ export function SalaryTemplateDialog({
       else setTitleError(res.error);
     });
   };
+
+  // 開いたタイミングで「使用する最新有報データ」のメタ情報を取得
+  useEffect(() => {
+    if (!open || !articleId || !company) {
+      setDataSource(null);
+      setDataSourceError(null);
+      return;
+    }
+    let cancelled = false;
+    setDataSourceLoading(true);
+    setDataSourceError(null);
+    getSalaryDataSourceMeta(articleId).then((res) => {
+      if (cancelled) return;
+      setDataSourceLoading(false);
+      if (res.ok) setDataSource(res.data);
+      else setDataSourceError(res.error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, articleId, company]);
 
   // 統計
   const stats = useMemo(() => {
@@ -389,10 +425,18 @@ export function SalaryTemplateDialog({
         console.warn("auto-apply category failed", e);
       }
     }
+    // 紐付き企業の最新有報を articles に自動リンク
+    if (onAutoLinkXbrlDocs) {
+      try {
+        await onAutoLinkXbrlDocs();
+      } catch (e) {
+        console.warn("auto-link xbrl docs failed", e);
+      }
+    }
     toast.success(
       titleApplied
-        ? `タイトル + ${ordered.length} セクション + カテゴリでエディタを更新しました`
-        : `${ordered.length} セクション + カテゴリでエディタを更新しました`
+        ? `タイトル + ${ordered.length} セクション + カテゴリ + 有報リンクでエディタを更新しました`
+        : `${ordered.length} セクション + カテゴリ + 有報リンクでエディタを更新しました`
     );
     setConfirmingApply(false);
     onClose();
@@ -439,9 +483,6 @@ export function SalaryTemplateDialog({
               <Sparkles className="h-4 w-4 text-brand-600" />
               {company?.name ? `${company.name} × 年収` : "{社名} × 年収"}　記事を生成
             </h2>
-            <p className="mt-0.5 text-xs text-ink-subtle">
-              article-salary.md の v2 テンプレートに沿って、各セクションを順次生成し、まとめてエディタに反映できます。
-            </p>
           </div>
           <button
             type="button"
@@ -462,6 +503,17 @@ export function SalaryTemplateDialog({
               この記事には関連企業が紐付いていません。先に「関連企業」を 1 社以上追加してください。
             </span>
           </div>
+        )}
+
+        {/* 使用する最新有報データの表示 */}
+        {company && (
+          <DataSourcePanel
+            companyName={company.name}
+            edinetCode={company.edinet_code}
+            loading={dataSourceLoading}
+            error={dataSourceError}
+            data={dataSource}
+          />
         )}
 
         {/* バッチ進捗バー */}
@@ -900,6 +952,143 @@ function Stat({ label, value }: { label: string; value: string }) {
       </div>
       <div className="font-numeric text-sm font-semibold tabular-nums text-ink">
         {value}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// 使用する最新有報データのパネル
+// 「いまどの年度の有報をもとに記事を生成するか」を読者に明示する。
+// 鮮度（提出日からの経過月数）に応じて緑 / 黄 / 赤 で警告する。
+// =====================================================================
+
+function DataSourcePanel({
+  companyName,
+  edinetCode,
+  loading,
+  error,
+  data,
+}: {
+  companyName: string;
+  edinetCode: string;
+  loading: boolean;
+  error: string | null;
+  data: SalaryDataSourceMeta | null;
+}) {
+  const FRESHNESS_TONE: Record<SalaryDataSourceMeta["freshness"], string> = {
+    fresh: "border-positive-200 bg-positive-50 text-positive-700",
+    stale: "border-amber-200 bg-amber-50 text-amber-900",
+    very_stale: "border-negative/30 bg-negative-50 text-negative-700",
+    unknown: "border-surface-border bg-surface-muted/40 text-ink-muted",
+  };
+  const FRESHNESS_LABEL: Record<SalaryDataSourceMeta["freshness"], string> = {
+    fresh: "最新",
+    stale: "やや古い",
+    very_stale: "古い（要更新）",
+    unknown: "未取得",
+  };
+
+  // 提出日 ISO → 日本表記
+  const formatDate = (iso: string | null): string => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return new Intl.DateTimeFormat("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  };
+
+  const tone =
+    data?.freshness ?? (loading ? "unknown" : error ? "very_stale" : "unknown");
+  const isMissing = !loading && !error && (!data || !data.doc_id);
+
+  return (
+    <div className="mx-6 mt-4">
+      <div
+        className={cn(
+          "rounded-md border px-3 py-2.5 text-xs",
+          FRESHNESS_TONE[tone]
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-1.5 font-semibold">
+            <FileText className="h-3.5 w-3.5" aria-hidden />
+            <span>使用する最新の有報データ</span>
+          </div>
+          {data && data.freshness !== "unknown" && (
+            <span className="shrink-0 rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] font-semibold">
+              {FRESHNESS_LABEL[data.freshness]}
+              {data.age_months != null && ` ・ ${data.age_months} ヶ月前`}
+            </span>
+          )}
+        </div>
+
+        {loading && (
+          <div className="mt-1 flex items-center gap-1.5 text-ink-muted">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>取得中…</span>
+          </div>
+        )}
+
+        {error && !loading && (
+          <div className="mt-1 text-negative-700">取得エラー：{error}</div>
+        )}
+
+        {!loading && !error && isMissing && (
+          <div className="mt-1">
+            <p>
+              {companyName} の有報データが未取得です。先に EDINET ETL を回してから生成してください。
+            </p>
+          </div>
+        )}
+
+        {!loading && !error && data && data.doc_id && (
+          <div className="mt-1 grid gap-x-3 gap-y-0.5 sm:grid-cols-3">
+            <div>
+              <span className="text-[10px] uppercase tracking-wider opacity-70">
+                対象年度
+              </span>
+              <div className="font-numeric text-sm font-semibold tabular-nums">
+                FY {data.fiscal_year ?? "—"}
+              </div>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider opacity-70">
+                書類 ID
+              </span>
+              <div className="flex items-center gap-1 font-mono text-sm">
+                <a
+                  href={`https://disclosure2.edinet-fsa.go.jp/WEEK0010.aspx?uji.verb=W1E62071EdinetCodeSearch&uji.bean=ee.bean.W1E62071.EE1E62071Bean&TID=W1E62071&PID=W1E62071&edinetCode=${encodeURIComponent(edinetCode)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 underline-offset-2 hover:underline"
+                  title="EDINET で開く"
+                >
+                  {data.doc_id}
+                  <ExternalLink className="h-2.5 w-2.5" aria-hidden />
+                </a>
+              </div>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider opacity-70">
+                提出日
+              </span>
+              <div className="font-numeric text-sm font-semibold tabular-nums">
+                {formatDate(data.submitted_at)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && data && data.doc_id && (
+          <div className="mt-2 text-[11px] opacity-80">
+            経年データ：{data.history_count} 年分が articles 生成に使用されます
+          </div>
+        )}
       </div>
     </div>
   );

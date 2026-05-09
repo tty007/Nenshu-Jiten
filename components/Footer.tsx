@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ReopenCookieSettingsButton } from "@/components/consent/CookieConsentBanner";
 
 export function Footer() {
   return (
@@ -10,7 +11,7 @@ export function Footer() {
             <p className="mt-2 text-sm text-ink-muted">
               有価証券報告書の一次情報のみを使った、企業の年収・働き方の比較メディア。
               <br />
-              広告なし・完全無料。
+              完全無料。
             </p>
           </div>
           <div>
@@ -45,6 +46,19 @@ export function Footer() {
                 <Link href="/privacy-policy" className="hover:text-ink">
                   プライバシーポリシー
                 </Link>
+              </li>
+              <li>
+                <Link
+                  href="/external-transmission"
+                  className="hover:text-ink"
+                >
+                  外部送信に関する公表事項
+                </Link>
+              </li>
+              <li>
+                <ReopenCookieSettingsButton className="text-left hover:text-ink">
+                  Cookie設定を変更
+                </ReopenCookieSettingsButton>
               </li>
             </ul>
           </div>

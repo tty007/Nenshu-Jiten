@@ -10,7 +10,12 @@ import {
   type ConsentType,
 } from "./consents";
 
-type ConsentSource = "signup" | "mypage" | "reconsent_modal" | "admin";
+type ConsentSource =
+  | "signup"
+  | "signup_oauth"
+  | "mypage"
+  | "reconsent_modal"
+  | "admin";
 
 function isConsentType(v: unknown): v is ConsentType {
   return typeof v === "string" && (CONSENT_TYPES as readonly string[]).includes(v);
@@ -18,7 +23,11 @@ function isConsentType(v: unknown): v is ConsentType {
 
 function isConsentSource(v: unknown): v is ConsentSource {
   return (
-    v === "signup" || v === "mypage" || v === "reconsent_modal" || v === "admin"
+    v === "signup" ||
+    v === "signup_oauth" ||
+    v === "mypage" ||
+    v === "reconsent_modal" ||
+    v === "admin"
   );
 }
 

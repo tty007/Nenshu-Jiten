@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   FileText,
+  FolderTree,
   PanelRightClose,
   PanelRightOpen,
   Sparkles,
@@ -19,6 +20,8 @@ type Template = {
   subtitle: string;
   icon: React.ReactNode;
   description: string;
+  /** 自動付与されるカテゴリ（記事生成時に articles.category_id へ反映） */
+  category: { name: string; slug: string };
 };
 
 const TEMPLATES: Template[] = [
@@ -29,6 +32,7 @@ const TEMPLATES: Template[] = [
     icon: <Sparkles className="h-4 w-4" />,
     description:
       "「会社名 年収」クエリを狙う記事を生成するテンプレートです。サービス内データを用いて動的に記事を生成します。",
+    category: { name: "年収", slug: "salary" },
   },
 ];
 
@@ -42,6 +46,8 @@ type Props = {
   onApplyTitle?: (title: string) => void;
   /** カテゴリ自動セット（slug 指定） */
   onApplyCategoryBySlug?: (slugPath: string) => Promise<void> | void;
+  /** 紐付き企業の最新有報を articles に自動リンク */
+  onAutoLinkXbrlDocs?: () => Promise<void> | void;
 };
 
 export function RightSidebar({
@@ -52,6 +58,7 @@ export function RightSidebar({
   onReplace,
   onApplyTitle,
   onApplyCategoryBySlug,
+  onAutoLinkXbrlDocs,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -146,16 +153,17 @@ export function RightSidebar({
                   <div className="mt-0.5 font-mono text-[11px] text-ink-subtle">
                     {t.subtitle}
                   </div>
+                  <div className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-surface-border bg-surface-muted/50 px-1.5 py-0.5 text-[11px] text-ink-muted">
+                    <FolderTree className="h-3 w-3" aria-hidden />
+                    <span>カテゴリ：{t.category.name}</span>
+                    <span className="font-mono text-ink-subtle">/{t.category.slug}</span>
+                  </div>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
                     {t.description}
                   </p>
                 </button>
               </li>
             ))}
-            {/* 将来の拡張向けの薄いプレースホルダ */}
-            <li className="px-3 py-2 text-xs text-ink-subtle">
-              他のテンプレ（{"{社名}"} ×新卒採用、{"{業界}"} ランキング 等）を順次追加予定
-            </li>
           </ul>
 
           <footer className="shrink-0 border-t border-surface-border bg-surface-muted/30 px-4 py-2 text-[11px] text-ink-subtle">
@@ -184,6 +192,7 @@ export function RightSidebar({
           onReplace={onReplace}
           onApplyTitle={onApplyTitle}
           onApplyCategoryBySlug={onApplyCategoryBySlug}
+          onAutoLinkXbrlDocs={onAutoLinkXbrlDocs}
           onAfterApply={() => setOpen(false)}
         />
       )}

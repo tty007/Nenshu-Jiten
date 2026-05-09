@@ -4,6 +4,11 @@ import { Suspense } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import { PageViewTracker } from "@/components/PageViewTracker";
 import { Toaster } from "@/components/Toaster";
+import { CookieConsentBanner } from "@/components/consent/CookieConsentBanner";
+import { PolicyReacknowledgementModal } from "@/components/consent/PolicyReacknowledgementModal";
+import { getCookieConsent } from "@/lib/consent/cookie-consent";
+import { CURRENT_POLICY_VERSION } from "@/lib/profile/consents";
+import { shouldShowReacknowledgement } from "@/lib/profile/get-policy-acknowledgement";
 import "./globals.css";
 
 const notoSansJP = Noto_Sans_JP({
@@ -28,24 +33,35 @@ export const metadata: Metadata = {
     template: "%s | 年収辞典",
   },
   description:
-    "金融庁EDINETに提出された有価証券報告書から、企業の平均年収・勤続年数・従業員数・業績を取得し、業界平均と比較できる無料・広告なしの企業情報メディア。",
+    "金融庁EDINETに提出された有価証券報告書から、企業の平均年収・勤続年数・従業員数・業績を取得し、業界平均と比較できる無料の企業情報メディア。",
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [cookieConsent, needsReack] = await Promise.all([
+    getCookieConsent(),
+    shouldShowReacknowledgement(),
+  ]);
   return (
     <html lang="ja" className={`${notoSansJP.variable} ${inter.variable}`}>
       <body>
         {children}
         <Toaster />
-        <Suspense fallback={null}>
-          <PageViewTracker />
-        </Suspense>
-        <Analytics />
+        {cookieConsent.analytics && (
+          <Suspense fallback={null}>
+            <PageViewTracker />
+          </Suspense>
+        )}
+        {cookieConsent.analytics && <Analytics />}
+        <CookieConsentBanner initial={cookieConsent} />
+        <PolicyReacknowledgementModal
+          shouldShow={needsReack}
+          policyVersion={CURRENT_POLICY_VERSION}
+        />
       </body>
     </html>
   );

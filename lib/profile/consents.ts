@@ -55,9 +55,22 @@ export const CONSENT_META: Record<ConsentType, ConsentMeta> = {
 
 export type ConsentState = Record<ConsentType, boolean>;
 
-export const EMPTY_CONSENT_STATE: ConsentState = {
+/**
+ * 明示的な同意レコードがないユーザに対して適用する既定値。
+ *
+ * - personalized_ads は ON：プライバシーポリシーで「同意した利用者に対して
+ *   属性ベースのレコメンドを行う」旨を開示しており、サーバ内処理に閉じる
+ *   ため、黙示の同意で運用可能（個情法 16・17 条の利用目的内）。
+ * - 他 3 種は OFF：
+ *     marketing_email         …特定電子メール法でオプトイン必須
+ *     third_party_advertising …個情法 31 条（個人関連情報の第三者提供）の同意必要
+ *     data_sharing            …個情法 27 条（第三者提供）の同意必要
+ *
+ * いずれもマイページから即時撤回・追加同意できる前提でこの既定値を採用する。
+ */
+export const DEFAULT_CONSENT_STATE: ConsentState = {
   marketing_email: false,
-  personalized_ads: false,
+  personalized_ads: true,
   third_party_advertising: false,
   data_sharing: false,
 };

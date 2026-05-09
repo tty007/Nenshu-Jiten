@@ -27,6 +27,12 @@ import { RightSidebar } from "./RightSidebar";
 import { AuthorSelector } from "./AuthorSelector";
 import { CategorySelector } from "./CategorySelector";
 import { SlugEditor } from "./SlugEditor";
+import { XbrlDocSelector } from "./XbrlDocSelector";
+import {
+  autoLinkXbrlDocsForArticle,
+  listArticleXbrlDocs,
+  type ArticleXbrlDocChip,
+} from "@/lib/admin/articles/xbrl-actions";
 
 type Props = {
   articleId: string;
@@ -47,6 +53,7 @@ type Props = {
     name_path: string;
   } | null;
   initialSlug: string | null;
+  initialXbrlDocs: ArticleXbrlDocChip[];
   updatedAt: string;
 };
 
@@ -76,6 +83,7 @@ export function ArticleEditor({
   initialAuthor,
   initialCategory,
   initialSlug,
+  initialXbrlDocs,
   updatedAt,
 }: Props) {
   const router = useRouter();
@@ -84,6 +92,8 @@ export function ArticleEditor({
   const [status, setStatus] = useState<ArticleStatus>(initialStatus);
   // 紐付き企業（AI 執筆 / 右サイドバーのテンプレ生成で使用）
   const [companies, setCompanies] = useState<CompanyChip[]>(initialCompanies);
+  // 紐付き有報書類（複数）。テンプレ反映時の auto-link 後にも親で更新される
+  const [xbrlDocs, setXbrlDocs] = useState<ArticleXbrlDocChip[]>(initialXbrlDocs);
   const [savedAt, setSavedAt] = useState<string>(updatedAt);
   const [slug, setSlug] = useState<string | null>(initialSlug);
   const [metaOpen, setMetaOpen] = useState<boolean>(true);
@@ -385,7 +395,7 @@ export function ArticleEditor({
             aria-hidden={!metaOpen}
           >
             <div className="overflow-hidden">
-              <div className="space-y-3">
+              <div className="space-y-3 pb-6">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 <span className="flex w-24 shrink-0 items-center justify-center self-stretch border-r border-surface-border px-2 py-1 text-sm font-semibold tracking-wide text-ink-muted">
                   関連企業
@@ -394,6 +404,17 @@ export function ArticleEditor({
                   articleId={articleId}
                   initialCompanies={initialCompanies}
                   onChange={(next) => setCompanies(next)}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="flex w-24 shrink-0 items-center justify-center self-stretch border-r border-surface-border px-2 py-1 text-sm font-semibold tracking-wide text-ink-muted">
+                  有報情報
+                </span>
+                <XbrlDocSelector
+                  articleId={articleId}
+                  initialDocs={xbrlDocs}
+                  companyEdinetCodes={companies.map((c) => c.edinet_code)}
+                  onChange={(next) => setXbrlDocs(next)}
                 />
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -461,7 +482,11 @@ export function ArticleEditor({
 
         {/* 本文エディタ：ボーダーなし */}
         <TipTapEditor
-          initialContent={initialBodyJson ?? initialBodyHtml ?? ""}
+          // body_html を優先する。過去に body_json が level 等の attrs を欠落
+          // させた状態で保存されているケースがあり、その場合 JSON 側を信頼すると
+          // 全見出しが h1 として表示されてしまうため、確実に正規化された
+          // HTML 側を一次ソースとして扱う。
+          initialContent={initialBodyHtml || initialBodyJson || ""}
           onUpdate={onEditorUpdate}
           articleId={articleId}
           companyCount={companies.length}
@@ -504,6 +529,16 @@ export function ArticleEditor({
           }
           setCategorySlugPath(cat.slug_path);
           setForcedCategory(cat);
+        }}
+        onAutoLinkXbrlDocs={async () => {
+          const res = await autoLinkXbrlDocsForArticle(articleId);
+          if (!res.ok) {
+            toast.error(`有報リンク失敗: ${res.error}`);
+            return;
+          }
+          // 成功後、最新の有報リストを取り直して state 同期
+          const list = await listArticleXbrlDocs(articleId);
+          if (list.ok) setXbrlDocs(list.data);
         }}
       />
     </div>

@@ -150,10 +150,10 @@ export function CategorySelector({
       >
         <FolderTree className="h-4 w-4 text-ink-muted" />
         {catId && namePath ? (
-          <span className="text-left leading-tight">
-            <span className="block font-medium text-ink">{namePath}</span>
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="font-medium text-ink">{namePath}</span>
             {slugPath && (
-              <span className="block font-mono text-[10px] text-ink-subtle">
+              <span className="font-mono text-[10px] text-ink-subtle">
                 /{slugPath}
               </span>
             )}

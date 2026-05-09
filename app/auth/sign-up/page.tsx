@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthFormShell } from "@/components/auth/AuthFormShell";
 import { Divider } from "@/components/auth/AuthFormFields";
+import { ConsentCheckboxes } from "@/components/auth/ConsentCheckboxes";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { SignUpForm } from "@/components/auth/SignUpForm";
 import { getCurrentUser } from "@/lib/auth/get-user";
+import { getPendingConsents } from "@/lib/profile/pending-consents";
 
 export const metadata = {
   title: "会員登録",
@@ -15,6 +17,7 @@ export const metadata = {
 export default async function SignUpPage() {
   const user = await getCurrentUser();
   if (user) redirect("/mypage");
+  const pending = await getPendingConsents();
   return (
     <AuthFormShell
       title="会員登録"
@@ -28,6 +31,8 @@ export default async function SignUpPage() {
         </p>
       }
     >
+      <ConsentCheckboxes initial={pending} />
+      <div className="my-5" />
       <GoogleSignInButton next="/mypage" label="Googleで会員登録" />
       <Divider label="または" />
       <SignUpForm />

@@ -56,6 +56,7 @@ export default async function EditArticlePage({
           : null
       }
       initialSlug={article.slug}
+      initialXbrlDocs={article.xbrl_documents}
       updatedAt={article.updated_at}
     />
   );

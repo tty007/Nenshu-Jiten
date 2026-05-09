@@ -15,6 +15,7 @@ import {
 } from "@/lib/article-jsonld";
 import { extractTocAndAddIds } from "@/lib/article-toc";
 import { getPublishedArticle } from "@/lib/data/published-article";
+import { trackArticleView } from "@/lib/data/track-entity-view";
 
 // 動的ルート：UserMenu 内で cookies() を読むため SSG ではなく動的レンダリング
 export const dynamic = "force-dynamic";
@@ -55,6 +56,9 @@ export default async function PublicArticlePage({
   const idOrSlug = (slug ?? []).join("/");
   const article = await getPublishedArticle(idOrSlug);
   if (!article) notFound();
+
+  // PV を fire-and-forget で記録。集計は article_page_views(date, article_id, count)。
+  void trackArticleView(article.id);
 
   // 目次（メンバー限定セクションも見出しは表示するので含める）
   const { toc, htmlWithIds } = extractTocAndAddIds(article.body_html ?? "");

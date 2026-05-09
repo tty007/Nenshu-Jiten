@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
+import { Heading } from "@tiptap/extension-heading";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Image } from "@tiptap/extension-image";
@@ -13,6 +14,29 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { Highlight } from "@tiptap/extension-highlight";
 import { CellSelection } from "@tiptap/pm/tables";
+
+/**
+ * 見出しレベルを HTML タグ名から確実に抽出する Heading 拡張。
+ *
+ * デフォルトの Heading 拡張は parseRule.attrs に level を埋め込んでいるが、
+ * tiptap v3 + ProseMirror v1.25 の組み合わせで body_json 保存後に level
+ * 属性が落ちてしまう不具合があり、再ロード時に全見出しが level=1 に
+ * 戻ってしまう。タグ名から明示的に parseHTML してこれを防ぐ。
+ */
+const RobustHeading = Heading.extend({
+  addAttributes() {
+    return {
+      level: {
+        default: 1,
+        rendered: false,
+        parseHTML: (element) => {
+          const m = element.tagName.match(/^H([1-6])$/i);
+          return m ? Number(m[1]) : 1;
+        },
+      },
+    };
+  },
+});
 
 /** TableCell / TableHeader 共通の「背景色・文字色」属性。inline style で出力。 */
 function cellColorAttributes() {
@@ -103,8 +127,10 @@ export function TipTapEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
+        // バンドル版 Heading は無効化し、後述 RobustHeading で差し替える
+        heading: false,
       }),
+      RobustHeading.configure({ levels: [1, 2, 3] }),
       Link.configure({
         openOnClick: false,
         autolink: true,
@@ -119,7 +145,28 @@ export function TipTapEditor({
         inline: false,
         allowBase64: false,
       }),
-      Table.configure({ resizable: true, HTMLAttributes: { class: "tiptap-table" } }),
+      // .table-scroll でラップして、はみ出した時だけ親が横スクロールできるように
+      // NodeView で <div class="table-scroll"><table>...</table></div> として描画する。
+      // テーブル自体は width: max-content; min-width: 100% で、内容に応じた自然幅を取る。
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: { class: "tiptap-table" },
+      }).extend({
+        addNodeView() {
+          return ({ HTMLAttributes }) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "table-scroll";
+            const table = document.createElement("table");
+            for (const [k, v] of Object.entries(HTMLAttributes)) {
+              if (typeof v === "string") table.setAttribute(k, v);
+            }
+            const tbody = document.createElement("tbody");
+            table.appendChild(tbody);
+            wrapper.appendChild(table);
+            return { dom: wrapper, contentDOM: tbody };
+          };
+        },
+      }),
       // <tr> / <td> / <th> の class・色属性を保持
       TableRow.extend({
         addAttributes() {
@@ -578,11 +625,12 @@ function EditorStyles() {
         pointer-events: none;
       }
 
-      /* Placeholder（空ブロックに薄く表示） */
+      /* Placeholder（空ブロックに薄く表示）。
+         h3 は ::before を ✓ チェックマーク表示に使っているため、
+         placeholder の対象から除外する（空 h3 でも常に ✓ を表示）。 */
       .tiptap-content p.is-editor-empty:first-child::before,
       .tiptap-content h1.is-empty::before,
-      .tiptap-content h2.is-empty::before,
-      .tiptap-content h3.is-empty::before {
+      .tiptap-content h2.is-empty::before {
         content: attr(data-placeholder);
         float: left;
         color: #94a3b8;

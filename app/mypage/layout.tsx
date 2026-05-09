@@ -43,7 +43,13 @@ export default async function MypageLayout({
                 href="/mypage/settings"
                 className="rounded-md px-2 py-1.5 text-ink hover:bg-surface-muted"
               >
-                設定
+                メール・パスワード設定
+              </Link>
+              <Link
+                href="/mypage/notifications"
+                className="rounded-md px-2 py-1.5 text-ink hover:bg-surface-muted"
+              >
+                通知・広告配信の設定
               </Link>
               {showAdmin && (
                 <Link

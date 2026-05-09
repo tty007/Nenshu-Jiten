@@ -247,6 +247,36 @@ export async function deleteArticles(
   return { ok: true, data: { deletedCount: del.data?.length ?? 0 } };
 }
 
+/**
+ * 記事のステータスを一括変更する。
+ * draft / published / archived のいずれかへ。
+ */
+export async function updateArticlesStatus(
+  ids: string[],
+  status: "draft" | "published" | "archived"
+): Promise<ActionResult<{ updatedCount: number }>> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+  if (ids.length === 0) return { ok: false, error: "変更対象が空です" };
+  if (ids.length > 500) {
+    return { ok: false, error: "1 回の変更は最大 500 件までです" };
+  }
+  if (!["draft", "published", "archived"].includes(status)) {
+    return { ok: false, error: `不明なステータス: ${status}` };
+  }
+
+  const sb = createSupabaseAdminClient();
+  const upd = await sb
+    .from("articles")
+    .update({ status, updated_at: new Date().toISOString() })
+    .in("id", ids)
+    .select("id");
+  if (upd.error) return { ok: false, error: upd.error.message };
+
+  revalidatePath("/admin/articles");
+  return { ok: true, data: { updatedCount: upd.data?.length ?? 0 } };
+}
+
 // =====================================================================
 // 企業セレクタの検索（Server Action として export して fetch 不要にする）
 // =====================================================================

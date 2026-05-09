@@ -68,6 +68,7 @@ export type ArticleListRow = {
   created_at: string;
   company_count: number;
   companies: Array<{ id: string; name: string; edinet_code: string }>;
+  category: { id: string; slug: string; name: string } | null;
 };
 
 export type ArticleDetail = {
@@ -114,7 +115,8 @@ export async function listArticles(opts: {
   let q = sb
     .from("articles")
     .select(
-      `id, title, status, created_at, updated_at,
+      `id, title, status, category_id, created_at, updated_at,
+       article_categories(id, slug, name),
        article_companies(
          display_order,
          companies(id, name, edinet_code)
@@ -152,6 +154,9 @@ export async function listArticles(opts: {
       }))
       .filter((c) => c.id)
       .sort((a, b) => a.display_order - b.display_order);
+    // article_categories は !inner 指定なしの 1:1 join なので配列で返ることがある
+    const catRaw = r.article_categories;
+    const cat = Array.isArray(catRaw) ? catRaw[0] : catRaw;
     return {
       id: r.id,
       title: r.title,
@@ -164,6 +169,9 @@ export async function listArticles(opts: {
         name,
         edinet_code,
       })),
+      category: cat
+        ? { id: cat.id as string, slug: cat.slug as string, name: cat.name as string }
+        : null,
     };
   });
 

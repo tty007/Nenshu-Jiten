@@ -4,8 +4,19 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Trash2, X } from "lucide-react";
-import { deleteArticles } from "@/lib/admin/articles/actions";
+import {
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  Loader2,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  deleteArticles,
+  updateArticlesStatus,
+} from "@/lib/admin/articles/actions";
 import { dismissToast, toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -26,10 +37,14 @@ type ArticleRow = {
   id: string;
   title: string;
   status: "draft" | "published" | "archived";
+  created_at: string;
   updated_at: string;
   company_count: number;
   companies: Array<{ id: string; name: string; edinet_code: string }>;
+  category: { id: string; slug: string; name: string } | null;
 };
+
+type StatusValue = ArticleRow["status"];
 
 type Props = {
   rows: ArticleRow[];
@@ -114,6 +129,22 @@ export function ArticleListTable({ rows, total }: Props) {
     });
   };
 
+  const handleBulkStatus = (next: StatusValue) => {
+    const count = selectedIds.length;
+    const loadingId = toast.loading(`${count} 件を ${STATUS_LABEL[next]} に変更中…`);
+    startTransition(async () => {
+      const res = await updateArticlesStatus(selectedIds, next);
+      dismissToast(loadingId);
+      if (!res.ok) {
+        toast.error(`変更に失敗しました: ${res.error}`);
+        return;
+      }
+      toast.success(`${res.data.updatedCount} 件を ${STATUS_LABEL[next]} にしました`);
+      setSelectedMap({});
+      router.refresh();
+    });
+  };
+
   if (rows.length === 0) {
     return null;
   }
@@ -149,6 +180,10 @@ export function ArticleListTable({ rows, total }: Props) {
                 <X className="h-3 w-3" />
                 クリア
               </button>
+              <BulkStatusMenu
+                disabled={isPending}
+                onChange={handleBulkStatus}
+              />
               <button
                 type="button"
                 onClick={() => setConfirmOpen(true)}
@@ -158,7 +193,7 @@ export function ArticleListTable({ rows, total }: Props) {
                 {isPending ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    削除中…
+                    処理中…
                   </>
                 ) : (
                   <>
@@ -188,8 +223,10 @@ export function ArticleListTable({ rows, total }: Props) {
             <col className="w-10" />
             <col />{/* タイトル：残り全部 */}
             <col className="w-28" />
-            <col className="w-52" />
-            <col className="w-24" />
+            <col className="w-32" />{/* カテゴリ */}
+            <col className="w-44" />{/* 関連企業 */}
+            <col className="w-24" />{/* 作成 */}
+            <col className="w-24" />{/* 更新 */}
           </colgroup>
           <thead className="sticky top-0 z-10 bg-white text-left text-[11px] uppercase tracking-wide text-ink-subtle">
             <tr className="border-b border-ink/15">
@@ -207,7 +244,9 @@ export function ArticleListTable({ rows, total }: Props) {
               </th>
               <th className="whitespace-nowrap px-3 py-2.5 font-medium">タイトル</th>
               <th className="whitespace-nowrap px-3 py-2.5 font-medium">ステータス</th>
+              <th className="whitespace-nowrap px-3 py-2.5 font-medium">カテゴリ</th>
               <th className="whitespace-nowrap px-3 py-2.5 font-medium">関連企業</th>
+              <th className="whitespace-nowrap px-3 py-2.5 font-medium">作成</th>
               <th className="whitespace-nowrap px-3 py-2.5 font-medium">更新</th>
             </tr>
           </thead>
@@ -258,6 +297,18 @@ export function ArticleListTable({ rows, total }: Props) {
                     <StatusTag status={r.status} />
                   </td>
                   <td className="px-3 py-2.5 align-top">
+                    {r.category ? (
+                      <span
+                        className="inline-flex max-w-full items-center truncate rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
+                        title={r.category.name}
+                      >
+                        {r.category.name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-ink-subtle">-</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 align-top">
                     {r.companies.length === 0 ? (
                       <span className="text-xs text-ink-subtle">-</span>
                     ) : (
@@ -275,6 +326,9 @@ export function ArticleListTable({ rows, total }: Props) {
                         )}
                       </div>
                     )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 align-top font-numeric tabular-nums text-xs text-ink-muted">
+                    {fmt(r.created_at)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 align-top font-numeric tabular-nums text-xs text-ink-muted">
                     {fmt(r.updated_at)}
@@ -372,5 +426,94 @@ function StatusTag({ status }: { status: ArticleRow["status"] }) {
       />
       {STATUS_LABEL[status]}
     </span>
+  );
+}
+
+// =====================================================================
+// 一括ステータス変更メニュー
+// =====================================================================
+
+function BulkStatusMenu({
+  disabled,
+  onChange,
+}: {
+  disabled: boolean;
+  onChange: (next: StatusValue) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const items: Array<{ value: StatusValue; label: string }> = [
+    { value: "draft", label: "下書きにする" },
+    { value: "published", label: "公開する" },
+    { value: "archived", label: "アーカイブする" },
+  ];
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md border bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60",
+          open
+            ? "border-brand-500 ring-1 ring-brand-500"
+            : "border-surface-border"
+        )}
+      >
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        ステータス変更
+        <ChevronDown
+          className={cn(
+            "h-3 w-3 text-ink-subtle transition",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute right-0 z-30 mt-1 w-40 overflow-hidden rounded-lg border border-surface-border bg-white py-1 shadow-lg"
+        >
+          {items.map((it) => (
+            <button
+              key={it.value}
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onChange(it.value);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-brand-50/40"
+            >
+              <Circle
+                className={cn(
+                  "h-2 w-2 shrink-0 fill-current",
+                  it.value === "draft"
+                    ? "text-slate-400"
+                    : it.value === "published"
+                    ? "text-positive-600"
+                    : "text-amber-500"
+                )}
+              />
+              <span className="text-ink">{it.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

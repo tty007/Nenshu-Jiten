@@ -165,6 +165,36 @@ export async function processTask(
   }
 
   // ---------------------------------------------------------------
+  // 2.5) 平均年収データの可用性チェック（ドラフト作成より前に判定）
+  //   findSalaryReadyHistory と同じロジックで financial_metrics の
+  //   最新 2 行をのぞき、平均年収が 1 つも無ければ生成不可。先にスキップ
+  //   することで、空のタイトルだけの下書きが残るのを防ぐ。
+  // ---------------------------------------------------------------
+  let salaryAvailable = false;
+  try {
+    salaryAvailable = await hasSalaryDataForCompany(sb, task.company_id);
+  } catch (e) {
+    return {
+      kind: "failed",
+      error_code: "unknown",
+      error_message: (e as Error).message,
+      article_id: task.article_id,
+      cost_usd: 0,
+    };
+  }
+  if (!salaryAvailable) {
+    return {
+      kind: "skipped",
+      reason: "no_salary_data",
+      article_id:
+        decision.kind === "rewrite"
+          ? decision.article_id
+          : task.article_id,
+      cost_usd: 0,
+    };
+  }
+
+  // ---------------------------------------------------------------
   // 3) 記事の用意（既存リライト or 新規ドラフト作成）
   // ---------------------------------------------------------------
   let articleId: string;
@@ -230,21 +260,6 @@ export async function processTask(
     };
   }
   const ctx = ctxRes.data;
-
-  // ---------------------------------------------------------------
-  // 4.5) 平均年収データの可用性チェック
-  //   loadSalaryArticleContext は内部で findSalaryReadyHistory を通すので、
-  //   ctx.history が空 = 「最新と 1 年前の両方に平均年収データなし」を意味する。
-  //   このような企業は年収テンプレートでは記事を生成できないので skip する。
-  // ---------------------------------------------------------------
-  if (ctx.history.length === 0) {
-    return {
-      kind: "skipped",
-      reason: "no_salary_data",
-      article_id: existing?.article_id ?? null,
-      cost_usd: 0,
-    };
-  }
 
   // ---------------------------------------------------------------
   // 5) 全セクションを順次生成
@@ -403,6 +418,33 @@ async function createDraftAndLink(
     throw new Error(`article_companies insert: ${ac.error.message}`);
   }
   return articleId;
+}
+
+/**
+ * 平均年収データが当該企業について生成可能か。
+ *
+ * findSalaryReadyHistory と同じ判定:
+ *  - 最新年度に average_annual_salary がある → ok
+ *  - 1 年前にあれば fallback として ok
+ *  - どちらも無ければ false（記事生成不可）
+ */
+async function hasSalaryDataForCompany(
+  sb: SupabaseClient,
+  companyId: string
+): Promise<boolean> {
+  const res = await sb
+    .from("financial_metrics")
+    .select("fiscal_year, average_annual_salary")
+    .eq("company_id", companyId)
+    .order("fiscal_year", { ascending: false })
+    .limit(2);
+  if (res.error) {
+    throw new Error(`financial_metrics select: ${res.error.message}`);
+  }
+  if (!res.data || res.data.length === 0) return false;
+  return res.data.some(
+    (r) => (r as { average_annual_salary: number | null }).average_annual_salary != null
+  );
 }
 
 async function ensureSalaryCategory(

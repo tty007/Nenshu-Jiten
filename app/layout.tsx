@@ -51,11 +51,15 @@ export default async function RootLayout({
       <body>
         {children}
         <Toaster />
-        {cookieConsent.analytics && (
-          <Suspense fallback={null}>
-            <PageViewTracker />
-          </Suspense>
-        )}
+        {/*
+          自社内 PV 集計は個人識別情報を一切持たない（path + date + count のみ、
+          IP/UA/ユーザー ID は記録しない）。改正電気通信事業法 27条の12 が要求
+          する「外部送信」に該当しないため Cookie 同意は不要。Vercel Analytics
+          のように第三者送信を伴うものだけを analytics consent でゲートする。
+        */}
+        <Suspense fallback={null}>
+          <PageViewTracker />
+        </Suspense>
         {cookieConsent.analytics && <Analytics />}
         <CookieConsentBanner initial={cookieConsent} />
         <PolicyReacknowledgementModal

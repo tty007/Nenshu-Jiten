@@ -14,7 +14,17 @@ import { ProgressBar } from "@/components/admin/ProgressBar";
 import { SparkBarChart } from "@/components/admin/SparkBarChart";
 import { StatCard } from "@/components/admin/StatCard";
 import { TopMetricsChart } from "@/components/admin/TopMetricsChart";
-import { getDailyMetrics } from "@/lib/admin/get-daily-metrics";
+import {
+  buildContiguousDateAxis,
+  getDailyMetrics,
+} from "@/lib/admin/get-daily-metrics";
+import {
+  getDailyPageViewsLive,
+  getPageViewSummary,
+  getTopArticlesByViews,
+  getTopCompaniesByViews,
+  getTopPagesByPath,
+} from "@/lib/admin/get-page-view-stats";
 import {
   getCompanyStats,
   getDailySignups,
@@ -69,6 +79,11 @@ export default async function AdminDashboardPage() {
     recents,
     segments,
     daily,
+    livePv,
+    pvSummary,
+    topPaths,
+    topViewedCompanies,
+    topViewedArticles,
   ] = await Promise.all([
     getUserStats(),
     getDailySignups(30),
@@ -79,13 +94,26 @@ export default async function AdminDashboardPage() {
     getRecentlyUpdatedCompanies(20),
     getUserSegmentStats(),
     getDailyMetrics(30),
+    getDailyPageViewsLive(30),
+    getPageViewSummary(30),
+    getTopPagesByPath(30, 20),
+    getTopCompaniesByViews(30, 10),
+    getTopArticlesByViews(30, 10),
   ]);
-  const topChartData = daily.map((d) => ({
-    date: d.date,
-    usersNew: d.usersNew,
-    usersTotal: d.usersTotal,
-    pageViews: d.pageViews,
-  }));
+
+  // 30 日間の固定日付軸を作り、daily_metrics（users 系）と
+  // page_views 生集計（pageViews）をマージする。これで JST 03:00 の
+  // スナップショット前でも「今日」の PV が出る。
+  const dailyByDate = new Map(daily.map((d) => [d.date, d]));
+  const topChartData = buildContiguousDateAxis(30).map((date) => {
+    const dm = dailyByDate.get(date);
+    return {
+      date,
+      usersNew: dm?.usersNew ?? 0,
+      usersTotal: dm?.usersTotal ?? 0,
+      pageViews: livePv.get(date) ?? dm?.pageViews ?? 0,
+    };
+  });
 
   const etlStaleHours = etl.lastIngestAt
     ? (Date.now() - Date.parse(etl.lastIngestAt)) / (60 * 60 * 1000)
@@ -133,6 +161,191 @@ export default async function AdminDashboardPage() {
         <Card className="mt-6">
           <TopMetricsChart data={topChartData} />
         </Card>
+      </section>
+
+      {/* PV SUMMARY + BREAKDOWNS */}
+      <section>
+        <SectionHeader
+          title="ページビュー"
+          subtitle="同意不要の自社内集計（path / date / count のみ・PII なし）"
+        />
+        <div className="mt-6 grid gap-5 lg:grid-cols-4">
+          <StatCard
+            icon={Activity}
+            label="本日 PV"
+            value={pvSummary.totalToday}
+            unit="件"
+            hint={`過去7日 ${pvSummary.totalLast7d.toLocaleString("ja-JP")}`}
+          />
+          <StatCard
+            icon={TrendingUp}
+            label="過去30日 PV"
+            value={pvSummary.totalLastNDays}
+            unit="件"
+            hint={`ユニークパス ${pvSummary.uniquePathsLastNDays}`}
+          />
+          <StatCard
+            icon={Building2}
+            label="企業ページ閲覧 TOP"
+            value={
+              topViewedCompanies[0]
+                ? `${topViewedCompanies[0].count.toLocaleString("ja-JP")} 件`
+                : "—"
+            }
+            hint={topViewedCompanies[0]?.name ?? "データなし"}
+          />
+          <StatCard
+            icon={Sparkles}
+            label="記事閲覧 TOP"
+            value={
+              topViewedArticles[0]
+                ? `${topViewedArticles[0].count.toLocaleString("ja-JP")} 件`
+                : "—"
+            }
+            hint={topViewedArticles[0]?.title ?? "データなし"}
+          />
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-3">
+          <Card>
+            <SectionHeader
+              title="閲覧の多いパス TOP20"
+              subtitle="過去30日 / page_views テーブル"
+            />
+            <div className="mt-4 max-h-80 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-surface-border">
+              {topPaths.length === 0 ? (
+                <p className="text-sm text-ink-muted">まだ計測データがありません</p>
+              ) : (
+                <ol className="space-y-2.5">
+                  {topPaths.map((p, i) => {
+                    const max = topPaths[0].count;
+                    const pctW = max > 0 ? (p.count / max) * 100 : 0;
+                    return (
+                      <li
+                        key={p.path}
+                        className="grid grid-cols-[1.5rem_1fr_3rem] items-center gap-2 text-xs"
+                      >
+                        <span className="font-numeric font-bold tabular-nums text-ink-muted">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <span className="block truncate font-mono text-[11px] text-ink">
+                            {p.path}
+                          </span>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                            <span
+                              aria-hidden
+                              className="block h-full bg-gradient-to-r from-orange-400 to-orange-600"
+                              style={{ width: `${pctW}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-right font-numeric font-bold tabular-nums text-ink">
+                          {p.count.toLocaleString("ja-JP")}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader
+              title="企業ページ閲覧 TOP10"
+              subtitle="過去30日 / company_page_views"
+            />
+            <div className="mt-4 max-h-80 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-surface-border">
+              {topViewedCompanies.length === 0 ? (
+                <p className="text-sm text-ink-muted">まだ計測データがありません</p>
+              ) : (
+                <ol className="space-y-2.5">
+                  {topViewedCompanies.map((c, i) => {
+                    const max = topViewedCompanies[0].count;
+                    const pctW = max > 0 ? (c.count / max) * 100 : 0;
+                    return (
+                      <li
+                        key={c.companyId}
+                        className="grid grid-cols-[1.5rem_1fr_3rem] items-center gap-2 text-xs"
+                      >
+                        <span className="font-numeric font-bold tabular-nums text-ink-muted">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <Link
+                            href={`/companies/${c.edinetCode}`}
+                            className="block truncate font-medium text-ink hover:text-brand-700"
+                          >
+                            {c.name}
+                          </Link>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                            <span
+                              aria-hidden
+                              className="block h-full bg-gradient-to-r from-blue-500 to-blue-700"
+                              style={{ width: `${pctW}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-right font-numeric font-bold tabular-nums text-ink">
+                          {c.count.toLocaleString("ja-JP")}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader
+              title="記事閲覧 TOP10"
+              subtitle="過去30日 / article_page_views"
+            />
+            <div className="mt-4 max-h-80 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-surface-border">
+              {topViewedArticles.length === 0 ? (
+                <p className="text-sm text-ink-muted">まだ計測データがありません</p>
+              ) : (
+                <ol className="space-y-2.5">
+                  {topViewedArticles.map((a, i) => {
+                    const max = topViewedArticles[0].count;
+                    const pctW = max > 0 ? (a.count / max) * 100 : 0;
+                    const href = `/articles/${a.slug ?? a.articleId}`;
+                    return (
+                      <li
+                        key={a.articleId}
+                        className="grid grid-cols-[1.5rem_1fr_3rem] items-center gap-2 text-xs"
+                      >
+                        <span className="font-numeric font-bold tabular-nums text-ink-muted">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <Link
+                            href={href}
+                            className="block truncate font-medium text-ink hover:text-brand-700"
+                          >
+                            {a.title}
+                          </Link>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                            <span
+                              aria-hidden
+                              className="block h-full bg-gradient-to-r from-purple-500 to-purple-700"
+                              style={{ width: `${pctW}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-right font-numeric font-bold tabular-nums text-ink">
+                          {a.count.toLocaleString("ja-JP")}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          </Card>
+        </div>
       </section>
 
       {/* TOP ROW: hero summary + 3 KPI */}

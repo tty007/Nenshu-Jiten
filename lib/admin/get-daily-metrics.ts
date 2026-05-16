@@ -19,12 +19,15 @@ export type DailyMetric = {
 export const getDailyMetrics = cache(
   async (days: number = 30): Promise<DailyMetric[]> => {
     const sb = createSupabaseAdminClient();
+    // date desc で直近 N 件を取り、表示用に昇順へ戻す。
+    // （昇順 + limit だと「最古から N 件」になるので、daily_metrics が
+    //  積み上がると古い日付しか出ない既知バグの修正）
     const { data } = await sb
       .from("daily_metrics")
       .select(
         "date, users_total, users_new, users_active_24h, users_active_7d, favorites_total, favorites_new, companies_total, companies_updated, page_views, unique_paths"
       )
-      .order("date", { ascending: true })
+      .order("date", { ascending: false })
       .limit(days);
     type Row = {
       date: string;
@@ -40,10 +43,8 @@ export const getDailyMetrics = cache(
       unique_paths: number | null;
     };
     const rows = (data as Row[] | null) ?? [];
-    // 直近 N 件にトリム（昇順クエリで limit するとブランクが多い時に古い分から切られるので
-    // ここでは date desc で N 件取って reverse する方式が望ましい）
-    const sliced = rows.slice(-days);
-    return sliced.map((r) => ({
+    const ascending = rows.slice().reverse();
+    return ascending.map((r) => ({
       date: r.date,
       usersTotal: r.users_total,
       usersNew: r.users_new,
@@ -58,3 +59,28 @@ export const getDailyMetrics = cache(
     }));
   }
 );
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function jstDate(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+/**
+ * チャート描画用に「直近 N 日（必ず今日を末尾に含む）」の固定軸を作る。
+ * daily_metrics のスナップショットには今日の行が無いケース（朝の cron 前）
+ * があるが、それでも今日の生 PV を表示できるようにキー揃えする。
+ */
+export function buildContiguousDateAxis(days: number): string[] {
+  const today = jstDate();
+  const out: string[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    out.push(jstDate(new Date(Date.parse(`${today}T00:00:00+09:00`) - i * DAY_MS)));
+  }
+  return out;
+}

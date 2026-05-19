@@ -584,6 +584,25 @@ const BASE_SYSTEM = `あなたは年収辞典の経済ジャーナリスト・�
 - パーセント数値は最低 1 つ金額換算（例：「+12%」→「およそ 100 万円多い」）
 - 数字は与えられた値だけを使う。捏造禁止。因果関係は断定しない
 
+【絶対禁止：定性的事実の創作（最重要）】
+本記事のデータソースは「有価証券報告書（EDINET）の財務指標と企業概要 summary」「賃金センサス」「役職別賃金」のみです。
+プロンプト内の【数値の前提】や【会社サマリ】に明示されていない、以下のトピックは一切書かないこと:
+- 研修制度／教育プログラム／資格取得支援／OJT／人材育成施策
+- 福利厚生の具体名（育児休暇／産休制度／住宅手当／家族手当／社員寮／保養所／健康診断制度／退職金規程の内容）
+- 海外展開／海外事業／海外駐在／海外赴任／グローバル人材／グローバル化／国際的な視野／国際的なキャリア
+- ジョブローテーション／配属の幅／人事異動／キャリアパス制度／昇進ルート
+- 残業時間／労働時間／有給取得率／フレックス／在宅勤務制度
+- 初任給の金額／賞与の月数（〇か月）／退職金の額
+- 組織風土／社風／企業文化／従業員エンゲージメント／心理的安全性
+- ダイバーシティ／多様性／D&I／女性活躍 に紐づくあらゆる「取り組み・施策・活動・推進・促進・維持・向上・強化・支援」表現（言い換えても禁止。例:「多様性に関する取り組み」「多様性の維持や向上に向けた取り組み」「多様性に対する取り組み」も禁止）
+- 「制度が充実している」「体制が整っている」「環境が整備されている」「取り組みが進んでいる」のような根拠のない肯定的評価
+- 「業界平均を上回る／下回る」「高い水準／低い水準」「上位／下位」など、プロンプトで具体的な金額・順位・比率が示されていない場合の比較断定
+
+例えば summary に「海外〇〇」と明記されていなければ「海外展開」と書かない。
+summary に教育や研修への言及がなければ「研修制度」と書かない。
+average_overtime_hours が示されていなければ「残業時間」を書かない。
+迷ったら書かない。書ける根拠が無いと判断したら、その文ごと省略する。
+
 【重要部分のハイライト（蛍光ペン）】
 - セクションの「最重要の結論」と「読者がメモしたい数値・キーワード」を <mark class="tiptap-mark"> で囲む
 - 1 セクションあたり合計 1〜3 箇所だけ。多くても 4 箇所まで。それ以上は付けない（蛍光ペンの意味が失われる）
@@ -602,7 +621,46 @@ const BASE_SYSTEM = `あなたは年収辞典の経済ジャーナリスト・�
 - 「非常に」「大変」「極めて」「総合的に」「全体的に」「基本的には」
 - 「〜が重要です」「〜が求められています」「〜していきます」「いかがでしたか」
 - 「持続的成長」「企業価値向上」など経営計画用語
-- 「優れた技術力」「高い競争力」「業界トップクラス」など主観的賛辞`;
+- 「優れた技術力」「高い競争力」「業界トップクラス」「安定した職場環境」「魅力的な職場」「理想的なキャリア」など主観的賛辞`;
+
+/**
+ * 出力 HTML から「データ根拠が無いと推定される定性的事実」を検出して
+ * warning ラベルとして返す。記事再生成のシグナル / 管理画面での目視確認用。
+ *
+ * @param html 生成された本文 HTML
+ * @param allowList この記事のソース（summary 等）に元から存在する語。検出から除外する
+ */
+// 「業界平均を上回る／高い水準」「業界平均を下回る／低い水準」は数値データの方向と
+// 一致していれば事実なので、ここでは無条件には弾かない（事実検証は generators 側で
+// `diff` を AI プロンプトに渡すことで担保している）。検出する hyperbole は残す。
+const HALLUCINATION_KEYWORDS: { keyword: RegExp; label: string }[] = [
+  { keyword: /研修制度|教育制度|教育プログラム|研修プログラム|社員研修|研修体制|資格取得支援/, label: "研修制度" },
+  { keyword: /海外展開|海外事業|海外駐在|海外赴任|海外サポート|グローバル展開|グローバル人材|グローバル化|国際的な視野|国際的なキャリア/, label: "海外展開" },
+  { keyword: /ジョブローテーション|ジョブ・ローテーション|ローテーション制度/, label: "ジョブローテーション" },
+  { keyword: /育児休暇|育休制度|産休制度|住宅手当|家族手当|社員寮|保養所|健康診断制度|フレックス制度|在宅勤務制度/, label: "福利厚生(具体)" },
+  { keyword: /残業時間.{0,20}(時間|h)|月平均.{0,10}(時間|h).{0,10}残業|残業.{0,5}少なめ|残業.{0,5}多め/, label: "残業時間(具体)" },
+  // 「多様性」「ダイバーシティ」「D&I」「女性活躍」+ (取り組み/施策/活動/推進/促進/維持/向上 等) は
+  // すべて「社内施策の存在を推測している」と判定する。実際 §4.8 の貫通例:
+  // 「多様性に関する取り組み」「多様性の維持や向上に向けた取り組み」「多様性に対する取り組み」
+  { keyword: /(多様性|ダイバーシティ|D&I|女性活躍|女性の活躍).{0,30}(取り組み|取組|施策|活動|推進|促進|維持|向上|強化|拡大|支援|サポート)/, label: "ダイバーシティ施策" },
+  { keyword: /安定した職場環境|魅力的な職場|理想的な職場|働きやすい職場環境|アットホーム/, label: "主観的賛辞" },
+  // 数値の裏付け無しに使われがちな hyperbole のみ検出する
+  { keyword: /業界トップクラス|業界をリード|業界の最高水準|圧倒的に高い水準|業界随一|国内有数の年収/, label: "根拠なき断定" },
+];
+
+export function detectHallucinations(html: string, allowList: string = ""): string[] {
+  const warnings: string[] = [];
+  for (const { keyword, label } of HALLUCINATION_KEYWORDS) {
+    const m = html.match(keyword);
+    if (!m) continue;
+    // allowList（summary 等）に同じ語が含まれていれば「データ由来」とみなしスキップ
+    if (allowList && new RegExp(m[0].slice(0, Math.min(m[0].length, 6))).test(allowList)) {
+      continue;
+    }
+    warnings.push(`未根拠キーワード検出: ${label} ("${m[0].slice(0, 40)}")`);
+  }
+  return warnings;
+}
 
 // =====================================================================
 // AI セクション
@@ -696,24 +754,69 @@ async function genAboutCompany(
 ): Promise<GenerateResult | { ok: false; error: string }> {
   const c = ctx.company;
   const latest = ctx.history[0];
-  const userPrompt = `${c.name} について、3 つのパートを書いてください。
+  const summary = (c.summary ?? c.description ?? "").trim();
+  const hasSummary = summary.length > 0;
 
-【パート 1：会社概要】（h3「${c.name} とは」、200〜300 字）
+  // 業界平均（最新年度）を在籍数値プロフィールに供給する。
+  // これを渡さないと AI が「業界平均を上回る」と勝手に憶測してしまう（過去の事故）。
+  const ia = ctx.industry_averages.find(
+    (a) => latest && a.fiscal_year === latest.fiscal_year
+  );
+  const indAvg = ia?.avg_annual_salary ?? null;
+  const indTenure = ia?.avg_tenure_years ?? null;
+  const diff =
+    indAvg != null && latest?.average_annual_salary != null
+      ? latest.average_annual_salary - indAvg
+      : null;
+  const diffLabel =
+    diff != null
+      ? diff >= 0
+        ? `業界平均より +${toManYen(diff)} 高い`
+        : `業界平均より ${toManYen(diff)} 低い`
+      : "業界平均との比較データなし";
+
+  // パート 3 は summary に「事業領域」が書かれている時のみ AI に書かせる。
+  // summary 由来でない人事制度・海外展開・ローテ等への言及は厳禁。
+  const part3Block = hasSummary
+    ? `
+
+【パート 3：${c.name} の事業領域】（h3「${c.name} の事業領域」、地の文 200〜350 字、箇条書き禁止）
+パート 1 の会社サマリに**明示的に書かれている事業・サービス・ブランド・拠点**だけを、別の角度から再構成してください。
+- パート 1 と同じ事実を別表現で言い換える形で OK
+- サマリに無い事業・地域・新規領域は一切書かない（推測禁止）
+- 業績の数値（売上 ${toBigYenInt(latest?.revenue)}、営業利益 ${toBigYenInt(latest?.operating_income)}、従業員 ${formatNumber(latest?.employee_count)} 人）を 1 度織り込んでよい`
+    : "";
+
+  const part3Count = hasSummary ? "3" : "2";
+
+  const userPrompt = `${c.name} について、${part3Count} つのパートを書いてください。
+本記事のデータソースは「有価証券報告書（EDINET）の財務指標と企業概要 summary」のみです。
+**summary に書かれていない定性的事実（研修制度・福利厚生・海外展開・ジョブローテーション・組織風土・人事施策など）は一切書かないこと。** 触れたい場合でも、データに無いものは黙って省略してください。
+
+【パート 1：会社概要】（h3「${escapeHtml(c.name)} とは」、200〜300 字）
+基礎情報:
 - 業種: ${c.industry_name ?? "—"}
 - 上場市場: ${c.listed_market ?? "—"}
 - 本社: ${c.headquarters ?? "—"}
 - 設立: ${c.founded_year ?? c.founded_at ?? "—"}
-- 概要: ${c.summary ?? c.description ?? "（未取得）"}
 
-【パート 2：在籍メリット】（h3「${c.name} に在籍するメリット」、地の文 250〜400 字）
-- 平均年収 ${toManYen(latest?.average_annual_salary)}、平均年齢 ${latest?.average_age ?? "—"} 歳、平均勤続 ${latest?.average_tenure_years ?? "—"} 年、従業員 ${formatNumber(latest?.employee_count)} 人
-- 数値の特徴を踏まえ、読者が在籍することの実利（賃金水準・教育機会・安定性等）を地の文で。箇条書き禁止。
+会社サマリ（このサマリに書かれている範囲だけを忠実に整理してください。サマリに無い事実を加えない）:
+${hasSummary ? summary : "（取得できていません。汎用的な業界一般論ではなく、基礎情報の事実のみを淡々と書いてください）"}
 
-【パート 3：キャリアパス】（h3「キャリアパスの広がり」、地の文 200〜350 字）
-- 同社の規模感・業種から想定されるキャリアの広がりを段落形式で。箇条書き禁止。
-- ジョブローテーション・専門職化・関連会社や海外展開などに触れてよい（同社のサマリで触れられている範囲で）。
+【パート 2：${c.name} の数値プロフィール】（h3「${escapeHtml(c.name)} の数値プロフィール」、地の文 250〜400 字、箇条書き禁止）
+以下の数値「だけ」を根拠に、読者が同社の社員構成と賃金水準を把握できる解説を書いてください:
+- 平均年収: ${toManYen(latest?.average_annual_salary)}
+- 平均年齢: ${latest?.average_age ?? "—"} 歳
+- 平均勤続: ${latest?.average_tenure_years ?? "—"} 年（業界平均勤続: ${indTenure != null ? `${indTenure} 年` : "—"}）
+- 従業員数: ${formatNumber(latest?.employee_count)} 人
+- 業界平均年収: ${indAvg != null ? toManYen(indAvg) : "—"}（${diffLabel}）
 
-3 つの h3 と各パラグラフを、HTML（<h3> と <p> のみ）で続けて返してください。
+【厳守】
+- 業界平均との大小関係は、上で示した「${diffLabel}」と完全に一致させること（逆転は事実誤認になります）
+- 「研修」「教育」「福利厚生」「海外」「ジョブローテ」「組織文化」「制度が充実」「環境が整っている」「安定した職場環境」など、データソースに無い定性的事実・主観評価は書かない
+- 数値の意味（年代層が比較的若い／勤続が長め／業界平均との差）を、観察として書く（断定しない）${part3Block}
+
+${part3Count} 個の h3 と各パラグラフを、HTML（<h3> と <p> のみ）で続けて返してください。
 **重要：見出しは必ず <h3> を使い、<h1> や <h2> は出力しないこと。**
 このセクションの大見出しは外側で <h2> として既に出力されているため、内側で <h2> を使うと見出しが二重になります。`;
 
@@ -726,7 +829,8 @@ async function genAboutCompany(
   if (!r.ok) return r;
 
   const html = `<h2>${escapeHtml(c.name)} について</h2>\n${r.content}`;
-  return { html, usage: r.usage };
+  const warnings = detectHallucinations(r.content, summary);
+  return { html, usage: r.usage, warnings: warnings.length ? warnings : undefined };
 }
 
 async function genAverageSalary(
@@ -1000,9 +1104,21 @@ async function genGenderDiversity(
 - 平均勤続年数: ${latest?.average_tenure_years ?? "—"} 年
 
 ポイント:
-- 業界平均との差を 1 度示す
+- 業界平均との差を 1 度、観察として示す（差分は計算上の事実）
 - データが「未公表」「未取得」の場合は、その旨を率直に記す（捏造禁止）
 - 因果関係は断定しない
+
+【厳守 — 書いてはいけないこと（最重要）】
+- 「多様性」「ダイバーシティ」「D&I」「女性活躍」を主語にした **取り組み・施策・活動・推進・促進・維持・向上・強化・支援** など、社内活動の存在を示唆する記述はすべて禁止。
+  - 例えば次のような言い換えもすべて NG（過去に貫通した実例）:
+    - 「多様性に関する取り組み」
+    - 「多様性の維持や向上に向けた取り組み」
+    - 「多様性に対する取り組み」
+    - 「ダイバーシティ推進」「D&I の活動」「女性活躍を促進」
+- 「多様性」という語を出すなら **「多様性指標」「多様性データ」** のように **数値の指標を指す名詞** として使うことだけ許す。それ以外の文脈では一切使わない。
+- 「働きやすい環境」「制度が整っている」「安定した職場環境」「魅力的な職場」のような根拠なき肯定評価は禁止
+- 男女別賃金カーブの数値が示されていないため、男女別賃金差については書かない（このセクションでは比率のみ扱う）
+- 比率の数値が「未公表／未取得」のときは、推測で施策や姿勢に言及しない。事実として「公表されていない」とだけ書く
 
 <p> タグの段落のみ。`;
 
@@ -1015,7 +1131,8 @@ async function genGenderDiversity(
   if (!r.ok) return r;
 
   const html = `<h2>男女別の年収・多様性</h2>\n${r.content}`;
-  return { html, usage: r.usage };
+  const warnings = detectHallucinations(r.content);
+  return { html, usage: r.usage, warnings: warnings.length ? warnings : undefined };
 }
 
 async function genPersonaGuide(
@@ -1025,6 +1142,22 @@ async function genPersonaGuide(
   const c = ctx.company;
   const latest = ctx.history[0];
 
+  // 業界平均（最新年度）— 「業界中央値との比較」を AI に正しく書かせるために必須
+  const ia = ctx.industry_averages.find(
+    (a) => latest && a.fiscal_year === latest.fiscal_year
+  );
+  const indAvg = ia?.avg_annual_salary ?? null;
+  const diff =
+    indAvg != null && latest?.average_annual_salary != null
+      ? latest.average_annual_salary - indAvg
+      : null;
+  const diffLabel =
+    diff != null
+      ? diff >= 0
+        ? `業界平均より +${toManYen(diff)} 高い水準`
+        : `業界平均より ${toManYen(diff)} 低い水準`
+      : "業界平均との比較データなし";
+
   const userPrompt = `${c.name} に関心を持つ 3 ペルソナへ向けたガイドを書きます。
 
 【数値の前提】
@@ -1032,17 +1165,30 @@ async function genPersonaGuide(
 - 平均年齢: ${latest?.average_age ?? "—"} 歳
 - 業種: ${c.industry_name ?? "—"}
 - 従業員数: ${formatNumber(latest?.employee_count)} 人
+- 業界平均年収: ${indAvg != null ? toManYen(indAvg) : "—"}（${diffLabel}）
 
 3 つの h3 を立てて、それぞれ地の文 200〜300 字で書いてください。箇条書き禁止。
 
 1. <h3>転職を検討中の方へ</h3>
-   想定オファー水準・交渉のヒント。同社の年齢別年収の目安に触れる。
+   平均年収・平均年齢から「同社で目安となる年収レンジ」を観察。年代別の詳細推計は別セクション（年代別の推定年収）に誘導してよい。
 
 2. <h3>就活生の方へ</h3>
-   初任給・将来の年収カーブ・配属やキャリアの可能性に触れる。
+   平均年齢・勤続から見える「若手社員が現場で何年かけてどの水準に至るか」の目安を、与えられた数値の範囲で観察。
 
 3. <h3>現職社員の方へ</h3>
-   業界中央値との比較から見える市場価値、外部評価の目線を提供。
+   業界平均年収との差「${diffLabel}」を踏まえた市場価値の見立て。同業他社比較の詳細は別セクション（同業他社との比較）に誘導してよい。
+
+【厳守 — どのペルソナでも書いてはいけないこと】
+- 初任給の金額・水準感（データソース無し）
+- 賞与の月数（データソース無し）
+- 配属先・部門・職種の情報（データソース無し）
+- 研修制度・教育プログラム・OJT・資格取得支援
+- 福利厚生の具体（住宅手当・社員寮・育休 等）
+- 海外展開・海外駐在・グローバル人材
+- ジョブローテーション・人事異動・昇進ルート
+- 残業時間・労働時間
+- 「魅力的な職場」「理想的な環境」「安定した職場環境」「成長が期待される」のような主観表現
+- 業界平均との大小関係を上の数値と逆に書くこと（事実誤認の禁止）
 
 各セクションは <h3> と <p> のみで構成。`;
 
@@ -1055,25 +1201,165 @@ async function genPersonaGuide(
   if (!r.ok) return r;
 
   const html = `<h2>あなたの立場で読み解く</h2>\n${r.content}`;
-  return { html, usage: r.usage };
+  const warnings = detectHallucinations(r.content);
+  return { html, usage: r.usage, warnings: warnings.length ? warnings : undefined };
 }
 
+/**
+ * §4.12 FAQ。
+ *
+ * かつてはハードコードした 12 問を全て AI に答えさせていたが、データ無しの
+ * トピック（残業時間／福利厚生／中途採用交渉／今後の見通し 等）を AI に
+ * 答えさせると 100% 捏造する事故が発覚したため、以下の方針に変更:
+ *
+ *  - データの有無で動的に質問構成を決める
+ *  - 雛形回答で十分な質問（初任給・退職金）はコードで固定文を埋め込む
+ *  - AI には数値の前提を渡したうえで、「データ範囲内で」答えさせる
+ *  - データソースが無いトピックは質問自体を出さない
+ */
 async function genFaq(
   ctx: SalaryArticleContext,
   model: AiModelId
 ): Promise<GenerateResult | { ok: false; error: string }> {
   const c = ctx.company;
   const latest = ctx.history[0];
+  const avg = latest?.average_annual_salary ?? null;
 
-  const userPrompt = `${c.name} の年収に関する FAQ を 12 問構成で書いてください。
+  // 業界平均（最新年度）
+  const ia = ctx.industry_averages.find(
+    (a) => latest && a.fiscal_year === latest.fiscal_year
+  );
+  const indAvg = ia?.avg_annual_salary ?? null;
+  const diff = indAvg != null && avg != null ? avg - indAvg : null;
 
-【数値の前提】
-- 平均年収: ${toManYen(latest?.average_annual_salary)}
-- 平均年齢: ${latest?.average_age ?? "—"} 歳
-- 業界: ${c.industry_name ?? "—"}
-- 従業員: ${formatNumber(latest?.employee_count)} 人
+  // 5 年前比較（履歴 5 件あるときだけ）
+  const fiveYearsAgo = ctx.history.find(
+    (m) => latest && m.fiscal_year === latest.fiscal_year - 4
+  );
+  const fiveYearGain =
+    fiveYearsAgo?.average_annual_salary != null && avg != null
+      ? avg - fiveYearsAgo.average_annual_salary
+      : null;
 
-各問の質問は読者目線の自然な日本語で。回答は 60〜120 字、複数文 OK。
+  // 年代別推計（§4.5 と同じロジックを呼んで FAQ にも整合させる）
+  let ageBands: { label: string; value_man: number }[] = [];
+  if (avg != null) {
+    const ageResult = estimateAgeSalary({
+      companyAvgAnnualYen: avg,
+      industryName: c.industry_name,
+    });
+    if (ageResult) {
+      // 20-24 + 25-29 → 20代、30-34 + 35-39 → 30代、40-44 + 45-49 → 40代の中点を採用
+      const pick = (a: string, b: string) => {
+        const ra = ageResult.rows.find((r) => r.age_class === a);
+        const rb = ageResult.rows.find((r) => r.age_class === b);
+        if (!ra || !rb) return null;
+        return Math.round((ra.estimated_annual_yen + rb.estimated_annual_yen) / 2 / 10000);
+      };
+      const v20 = pick("20-24", "25-29");
+      const v30 = pick("30-34", "35-39");
+      const v40 = pick("40-44", "45-49");
+      if (v20 != null) ageBands.push({ label: "20代", value_man: v20 });
+      if (v30 != null) ageBands.push({ label: "30代", value_man: v30 });
+      if (v40 != null) ageBands.push({ label: "40代", value_man: v40 });
+    }
+  }
+
+  // 同業比較順位（peer_meta から）
+  const selfRank = ctx.peer_meta.self_rank;
+  const totalInIndustry = ctx.peer_meta.total_in_industry;
+
+  // ── AI に答えさせる質問群（データに応じて動的構成） ──────────────────
+  type AiQ = { q: string; hint: string };
+  const aiQuestions: AiQ[] = [];
+
+  if (avg != null) {
+    aiQuestions.push({
+      q: `${c.name} の平均年収は？`,
+      hint: `平均年収 ${toManYen(avg)}（${latest?.fiscal_year ?? "—"}年度）と、平均年齢 ${latest?.average_age ?? "—"} 歳・平均勤続 ${latest?.average_tenure_years ?? "—"} 年だけを根拠に、年収水準を端的に答える。`,
+    });
+  }
+
+  if (avg != null && indAvg != null && diff != null) {
+    aiQuestions.push({
+      q: "業界平均と比べてどうですか？",
+      hint: `業界（${c.industry_name ?? "—"}）平均年収 ${toManYen(indAvg)} に対し、${c.name} は ${toManYen(avg)}（差 ${diff >= 0 ? "+" : ""}${toManYen(diff)}）。差の方向（高い/低い）を間違えないこと。`,
+    });
+  }
+
+  if (fiveYearGain != null && fiveYearsAgo) {
+    aiQuestions.push({
+      q: "5 年前と比較してどう変わりましたか？",
+      hint: `${fiveYearsAgo.fiscal_year}年度 ${toManYen(fiveYearsAgo.average_annual_salary)} → ${latest?.fiscal_year}年度 ${toManYen(avg)}。差は ${fiveYearGain >= 0 ? "+" : ""}${toManYen(fiveYearGain)}。`,
+    });
+  }
+
+  for (const band of ageBands) {
+    aiQuestions.push({
+      q: `${band.label}の年収はどれくらいですか？`,
+      hint: `推定 ${band.value_man} 万円。賃金センサスの年齢別カーブから推計した値であり、実際の年収は職種・等級・地域で変動する旨を必ず添える。この数値を変更しないこと。`,
+    });
+  }
+
+  if (latest?.average_overtime_hours != null) {
+    aiQuestions.push({
+      q: "残業時間はどれくらいですか？",
+      hint: `有価証券報告書記載の月平均所定外労働時間：${latest.average_overtime_hours} 時間/月。この数値だけを根拠にし、業務内容や部門差については推測しない。`,
+    });
+  }
+
+  if (latest?.female_manager_ratio != null) {
+    const indFemale = ia?.avg_female_manager_ratio;
+    aiQuestions.push({
+      q: "女性管理職比率はどれくらいですか？",
+      hint: `${latest.female_manager_ratio.toFixed(1)}%${indFemale != null ? `（業界平均 ${indFemale.toFixed(1)}%）` : ""}。比率の事実だけを答え、施策や取り組みには言及しない。`,
+    });
+  }
+
+  if (selfRank != null && totalInIndustry > 0) {
+    aiQuestions.push({
+      q: "同業他社と比べて高いですか？",
+      hint: `${c.industry_name ?? "—"} のうち平均年収を有報に記載している ${totalInIndustry} 社中 ${selfRank} 位。順位の事実だけを答える。トップ企業との金額差や推測コメントは不要。`,
+    });
+  }
+
+  // ── AI には触れさせず、コードで固定回答する質問群 ─────────────────────
+  // データソースが無く、AI に答えさせると確実に捏造する質問は、ここで
+  // 「データなし」「別ページ参照」と明示する固定文を埋め込む。
+  const fixedFaqs: { q: string; a_html: string }[] = [
+    {
+      q: `${c.name} の初任給はいくらですか？`,
+      a_html:
+        "初任給は学歴・職種・勤務地・配属部門で大きく異なるため、有価証券報告書からは確定値を取得していません。最新の確定値は同社の公式採用情報をご確認ください。",
+    },
+    {
+      q: `${c.name} の賞与（ボーナス）は何か月分ですか？`,
+      a_html:
+        "賞与の年間支給月数は労使交渉で年度ごとに変動するため、本記事では推計値を掲載していません。最新の妥結結果は同社の公式採用情報・IR 資料・有価証券報告書をご確認ください。",
+    },
+    {
+      q: `${c.name} の退職金はいくらくらいですか？`,
+      a_html:
+        "退職金規程・自己都合 / 会社都合・確定拠出年金の有無で大きく変動します。本記事では「大企業 60 歳定年・勤続 38 年」の経験則として平均年収の 2.5 倍を採用した試算値のみ掲載しています（生涯年収セクション参照）。",
+    },
+  ];
+
+  if (aiQuestions.length === 0) {
+    // 平均年収すら無いケース：固定文だけで FAQ を構成
+    const fixedHtml = fixedFaqs
+      .map(
+        (f) =>
+          `<details class="faq-item">\n  <summary>${escapeHtml(f.q)}</summary>\n  <p>${escapeHtml(f.a_html)}</p>\n</details>`
+      )
+      .join("\n");
+    const html = `<h2>よくある質問（FAQ）</h2>\n<div class="faq-section" data-type="faq-section">\n${fixedHtml}\n</div>`;
+    return { html, usage: ZERO_USAGE };
+  }
+
+  const userPrompt = `${c.name} の年収に関する FAQ を ${aiQuestions.length} 問書いてください。
+
+各問について、与えた【根拠】の範囲内だけで 60〜120 字の回答を作ってください。複数文 OK。
+**質問文は変更しないでください**（読者目線への微調整は OK ですが、意味を変えてはいけません）。
 **出力形式は厳密に次の構造**で、各問を <details> でアコーディオン化してください:
 
 <details class="faq-item">
@@ -1081,39 +1367,44 @@ async function genFaq(
   <p>{回答}</p>
 </details>
 
-12 個の <details> を続けて並べてください。<details> の外側に <div class="faq-section"> でラップしてください。
+${aiQuestions.length} 個の <details> を続けて並べてください。<details> の外側に <div class="faq-section"> でラップしてください。
 他のタグ（<h2>, <h3>, <ul> 等）や前置き文・コードフェンスは禁止。
 
-含めて欲しい質問テーマ:
-- ${c.name} の平均年収は？
-- 業界平均と比べて？
-- 5 年前と比較してどう変わった？
-- 20 代の年収は？
-- 30 代の年収は？
-- 40 代の年収は？
-- 残業時間は？
-- 女性管理職比率は？
-- 福利厚生の特徴は？
-- 中途採用の年収交渉のポイントは？
-- 同業他社と比べて高い？
-- 今後の見通しは？`;
+質問と根拠:
+${aiQuestions
+  .map((q, i) => `${i + 1}. Q: ${q.q}\n   根拠: ${q.hint}`)
+  .join("\n\n")}
+
+【絶対厳守】
+- 各回答は与えた【根拠】の数値・事実のみを使う。それ以外の数値（残業時間・初任給・賞与月数・福利厚生制度・教育制度・海外展開・組織風土）には一切触れない
+- 「業界をリードする」「成長が期待される」「安定した職場環境」「魅力的な選択肢」のような主観評価は禁止
+- 因果関係は断定しない（観察として書く）
+- 与えた数値以外を新たに作らない（捏造禁止）`;
 
   const r = await callOpenAi({
     model,
     system: BASE_SYSTEM,
     user: userPrompt,
-    maxOutputTokens: 3500,
+    maxOutputTokens: 3000,
   });
   if (!r.ok) return r;
 
-  // AI が <div class="faq-section"> でラップしていない場合に補正
-  const trimmed = r.content.trim();
-  const wrapped = trimmed.startsWith("<div")
-    ? trimmed
-    : `<div class="faq-section" data-type="faq-section">\n${trimmed}\n</div>`;
+  // AI 出力（aiQuestions 群）を取り出し、固定 FAQ を末尾に連結する
+  const aiContent = r.content.trim();
+  // <div class="faq-section"> でラップされている場合は中身だけ抜き出す
+  const innerMatch = aiContent.match(/<div[^>]*class="faq-section"[^>]*>([\s\S]*?)<\/div>\s*$/i);
+  const aiInner = innerMatch ? innerMatch[1].trim() : aiContent;
 
-  const html = `<h2>よくある質問（FAQ）</h2>\n${wrapped}`;
-  return { html, usage: r.usage };
+  const fixedHtml = fixedFaqs
+    .map(
+      (f) =>
+        `<details class="faq-item">\n  <summary>${escapeHtml(f.q)}</summary>\n  <p>${escapeHtml(f.a_html)}</p>\n</details>`
+    )
+    .join("\n");
+
+  const html = `<h2>よくある質問（FAQ）</h2>\n<div class="faq-section" data-type="faq-section">\n${aiInner}\n${fixedHtml}\n</div>`;
+  const warnings = detectHallucinations(aiInner);
+  return { html, usage: r.usage, warnings: warnings.length ? warnings : undefined };
 }
 
 // =====================================================================

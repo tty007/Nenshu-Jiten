@@ -433,7 +433,6 @@ html { scroll-behavior: smooth; }
 .tiptap-content .faq-section,
 .article-body .faq-section {
   margin: 1.75rem 0;
-  border-top: 2px solid #0f172a;
 }
 .tiptap-content .faq-item,
 .article-body details.faq-item {

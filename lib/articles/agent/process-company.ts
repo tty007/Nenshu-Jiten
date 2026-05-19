@@ -296,6 +296,15 @@ export async function processTask(
     htmlParts.push(r.data.html);
     cumCost += r.data.usage.cost_usd ?? 0;
 
+    // ハルシネーション疑い（未根拠キーワード）をサーバログに残す。
+    // 数値根拠なき定性的事実（研修制度・海外展開 等）が紛れ込んでいないかの
+    // 監視シグナル。生成は止めない（人手チェック前提）。
+    if (r.data.warnings && r.data.warnings.length > 0) {
+      console.warn(
+        `[salary-agent] section ${sec.id} (${sec.title}) for article ${articleId}: ${r.data.warnings.join(" / ")}`
+      );
+    }
+
     await sb
       .from("agent_job_tasks")
       .update({

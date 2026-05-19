@@ -337,12 +337,25 @@ async function loadPeers(
 
   const ids = cRes.data.map((c: any) => c.id as string);
 
-  const fmRes = await sb
-    .from("financial_metrics")
-    .select("company_id, fiscal_year, average_annual_salary, employee_count")
-    .in("company_id", ids)
-    .order("fiscal_year", { ascending: false });
-  if (fmRes.error || !fmRes.data) return empty;
+  // 大きい業界 (例: industry_code=9050 は 686社) では `.in(uuid[])` で URL 長制限を超えて
+  // PostgREST が 414 (Bad Request) を返し、loadPeers が silent fail → 「準備中です」表示に倒れる。
+  // それを避けるため 200 社ずつチャンクして取得・結合する。
+  const CHUNK = 200;
+  type FmRow = { company_id: string; fiscal_year: number; average_annual_salary: number | null; employee_count: number | null };
+  const fmRows: FmRow[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const r = await sb
+      .from("financial_metrics")
+      .select("company_id, fiscal_year, average_annual_salary, employee_count")
+      .in("company_id", chunk)
+      .order("fiscal_year", { ascending: false });
+    if (r.error || !r.data) return empty;
+    for (const m of r.data) fmRows.push(m as FmRow);
+  }
+  // チャンク結合後に再度 fiscal_year DESC で揃える（後続の "最初に出会った行 = 最新" ロジックの前提）
+  fmRows.sort((a, b) => b.fiscal_year - a.fiscal_year);
+  const fmRes = { data: fmRows, error: null as null };
 
   // 各 company の最新年度を採用
   const latestByCompany = new Map<

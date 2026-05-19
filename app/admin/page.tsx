@@ -104,16 +104,27 @@ export default async function AdminDashboardPage() {
   // 30 日間の固定日付軸を作り、daily_metrics（users 系）と
   // page_views 生集計（pageViews）をマージする。これで JST 03:00 の
   // スナップショット前でも「今日」の PV が出る。
+  // usersTotal は累計値なので、daily_metrics の行が無い日（cron 前の今日や
+  // 過去の欠損日）は前日の値を forward-fill する。0 に落とすと
+  // 「累計が下がる」グラフになってしまうため。
   const dailyByDate = new Map(daily.map((d) => [d.date, d]));
+  let carryUsersTotal = 0;
   const topChartData = buildContiguousDateAxis(30).map((date) => {
     const dm = dailyByDate.get(date);
+    if (dm && dm.usersTotal > 0) carryUsersTotal = dm.usersTotal;
     return {
       date,
       usersNew: dm?.usersNew ?? 0,
-      usersTotal: dm?.usersTotal ?? 0,
+      usersTotal: carryUsersTotal,
       pageViews: livePv.get(date) ?? dm?.pageViews ?? 0,
     };
   });
+  // 末尾（今日）の累計は users.total（auth.users の現在値）と一致させる
+  // ことで、スナップショット未生成でも最新の累計が反映される。
+  if (topChartData.length > 0) {
+    const last = topChartData[topChartData.length - 1];
+    if (users.total > last.usersTotal) last.usersTotal = users.total;
+  }
 
   const etlStaleHours = etl.lastIngestAt
     ? (Date.now() - Date.parse(etl.lastIngestAt)) / (60 * 60 * 1000)

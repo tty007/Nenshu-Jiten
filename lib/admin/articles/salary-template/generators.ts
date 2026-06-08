@@ -1676,7 +1676,7 @@ async function genLifetimeEarnings(
   <tbody>${breakdownRows}${summaryRow}</tbody>
 </table>`;
 
-  const userPrompt = `${company.name} の生涯年収試算（学卒〜60歳定年・勤続38年）について、2 段落（合計 250〜400 字）で解説してください。
+  const userPrompt = `${company.name} の生涯年収試算（大学卒（22歳）〜60歳定年・勤続38年）について、2 段落（合計 250〜400 字）で解説してください。
 
 試算値:
 - 在職中合計: ${toManYen(result.working_total_yen)}

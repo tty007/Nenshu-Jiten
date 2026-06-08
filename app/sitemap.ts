@@ -3,6 +3,7 @@ import {
   getAllIndustries,
   getCompanyIndexForSitemap,
 } from "@/lib/data/companies";
+import { getPublishedArticlesForSitemap } from "@/lib/data/published-article";
 
 // 1日に1回再生成。ETL（毎日 03:00 JST）後の次のクロールで最新化される。
 export const revalidate = 86400;
@@ -28,9 +29,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/terms-of-service`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
   ];
 
-  const [companies, industries] = await Promise.all([
+  const [companies, industries, articles] = await Promise.all([
     getCompanyIndexForSitemap(),
     getAllIndustries(),
+    getPublishedArticlesForSitemap(),
   ]);
 
   const companyPages: MetadataRoute.Sitemap = companies.map((c) => ({
@@ -47,5 +49,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticPages, ...companyPages, ...industryPages];
+  const articlePages: MetadataRoute.Sitemap = articles.map((a) => ({
+    url: `${base}/articles/${a.slugOrId}`,
+    lastModified: a.updated_at ? new Date(a.updated_at) : now,
+    changeFrequency: "weekly",
+    priority: 0.8,
+  }));
+
+  return [...staticPages, ...companyPages, ...industryPages, ...articlePages];
 }

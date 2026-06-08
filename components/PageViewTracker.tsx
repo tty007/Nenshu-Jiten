@@ -22,7 +22,10 @@ export function PageViewTracker() {
         fetch("/api/track-view", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: pathname }),
+          body: JSON.stringify({
+            path: pathname,
+            referrer: document.referrer || null,
+          }),
           keepalive: true,
         }).catch(() => {});
       } catch {

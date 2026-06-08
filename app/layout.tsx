@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP } from "next/font/google";
 import { Suspense } from "react";
 import { Analytics } from "@vercel/analytics/next";
+import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 import { PageViewTracker } from "@/components/PageViewTracker";
 import { Toaster } from "@/components/Toaster";
 import { CookieConsentBanner } from "@/components/consent/CookieConsentBanner";
@@ -35,6 +36,9 @@ export const metadata: Metadata = {
   description:
     "金融庁EDINETに提出された有価証券報告書から、企業の平均年収・勤続年数・従業員数・業績を取得し、業界平均と比較できる無料の企業情報メディア。",
   robots: { index: true, follow: true },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+  },
 };
 
 export default async function RootLayout({
@@ -60,7 +64,12 @@ export default async function RootLayout({
         <Suspense fallback={null}>
           <PageViewTracker />
         </Suspense>
-        {cookieConsent.analytics && <Analytics />}
+        {cookieConsent.analytics && (
+          <>
+            <Analytics />
+            <GoogleAnalytics />
+          </>
+        )}
         <CookieConsentBanner initial={cookieConsent} />
         <PolicyReacknowledgementModal
           shouldShow={needsReack}

@@ -108,3 +108,26 @@ export async function getPublishedArticle(
     companies,
   };
 }
+
+export type PublishedArticleSitemapRow = {
+  slugOrId: string;
+  updated_at: string;
+};
+
+/** sitemap.xml 用に status='published' の記事一覧を返す。slug があれば slug、無ければ id を URL セグメントに使う */
+export async function getPublishedArticlesForSitemap(): Promise<
+  PublishedArticleSitemapRow[]
+> {
+  const sb = createSupabaseAdminClient();
+  const { data, error } = await sb
+    .from("articles")
+    .select("id, slug, updated_at")
+    .eq("status", "published");
+  if (error || !data) return [];
+  return (data as Array<{ id: string; slug: string | null; updated_at: string }>).map(
+    (a) => ({
+      slugOrId: a.slug ?? a.id,
+      updated_at: a.updated_at,
+    }),
+  );
+}

@@ -69,13 +69,38 @@ function sameOrigin(req: NextRequest): boolean {
   return false;
 }
 
+/**
+ * referrer URL を集計用のホスト名に正規化する。
+ * - 自サイト経由 → "(internal)"
+ * - 空 / null → "(direct)"
+ * - URL 解析失敗 → null（集計しない）
+ * - それ以外 → "google.com" のようなホスト名（www. は剥がす、長さ制限 100）
+ */
+function normalizeReferrerHost(
+  referrer: string | null | undefined,
+  selfHost: string | null,
+): string | null {
+  if (!referrer) return "(direct)";
+  let u: URL;
+  try {
+    u = new URL(referrer);
+  } catch {
+    return null;
+  }
+  let host = u.host.toLowerCase();
+  if (selfHost && host === selfHost) return "(internal)";
+  host = host.replace(/^www\./, "");
+  if (host.length === 0 || host.length > 100) return null;
+  return host;
+}
+
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) {
     return NextResponse.json({ ok: false }, { status: 403 });
   }
-  let body: { path?: string };
+  let body: { path?: string; referrer?: string };
   try {
-    body = (await request.json()) as { path?: string };
+    body = (await request.json()) as { path?: string; referrer?: string };
   } catch {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
@@ -84,9 +109,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true });
   }
   const sb = createSupabaseAdminClient();
-  // upsert + count++ をアトミックに行うため RPC を使うのが理想だが
-  // PostgREST にも on_conflict update あり。ただし「count = count + 1」を表現できない
-  // ので、一旦 select → upsert で対応。high traffic 時は SQL function 化を検討。
   const date = todayJst();
   const { data: existing } = await sb
     .from("page_views")
@@ -104,5 +126,28 @@ export async function POST(request: NextRequest) {
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
+
+  // 参照元集計（page_view_referrers）。失敗しても page_views の成功は返す。
+  const referrerHost = normalizeReferrerHost(
+    body.referrer,
+    request.headers.get("host"),
+  );
+  if (referrerHost) {
+    const { data: existingRef } = await sb
+      .from("page_view_referrers")
+      .select("count")
+      .eq("date", date)
+      .eq("path", normalized)
+      .eq("referrer_host", referrerHost)
+      .maybeSingle<{ count: number }>();
+    const nextRef = (existingRef?.count ?? 0) + 1;
+    await sb
+      .from("page_view_referrers")
+      .upsert(
+        { date, path: normalized, referrer_host: referrerHost, count: nextRef },
+        { onConflict: "date,path,referrer_host" },
+      );
+  }
+
   return NextResponse.json({ ok: true });
 }

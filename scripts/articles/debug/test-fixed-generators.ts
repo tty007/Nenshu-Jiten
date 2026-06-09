@@ -14,11 +14,11 @@ import dotenv from "dotenv";
 import path from "node:path";
 import {
   loadSalaryArticleContext,
-} from "../../lib/admin/articles/salary-template/data";
+} from "@/lib/admin/articles/salary-template/data";
 import {
   generateSection,
   detectHallucinations,
-} from "../../lib/admin/articles/salary-template/generators";
+} from "@/lib/admin/articles/salary-template/generators";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 

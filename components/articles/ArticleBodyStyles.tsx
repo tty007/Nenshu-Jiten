@@ -376,13 +376,23 @@ html { scroll-behavior: smooth; }
    テンプレ生成器が表の直後に出力する「N社中 X 位」のような母数注記を、
    グレー & 小さめフォントで表のすぐ下に貼り付けるスタイル。
    .tiptap-content / .article-body の > * + * { margin-top: 1.2em } を
-   class セレクタで上書きするので !important は不要。 */
+   class セレクタで上書きするので !important は不要。
+
+   親レイアウト（flex/grid のカラム、table-scroll 内へ混入、等）が原因で
+   キャプションが「1 行 1 文字で縦に並ぶ」レンダーになる事故を防ぐため、
+   block + 100% 幅 + 通常の改行 + CJK の語中改行抑制を明示する。 */
 .tiptap-content .table-caption,
 .article-body .table-caption {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   font-size: 0.8rem;
   line-height: 1.6;
   color: #6b7280;
   margin-top: 0.4rem;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* テンプレ生成テーブル：行ごとの意味付け色 */

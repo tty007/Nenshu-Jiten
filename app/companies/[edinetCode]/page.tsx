@@ -33,6 +33,13 @@ import {
   formatNumber,
   formatPercent,
 } from "@/lib/utils";
+import {
+  buildOrganizationJsonLd,
+  buildCompanyDatasetJsonLd,
+  buildCompanyBreadcrumbJsonLd,
+  jsonLdToScript,
+  type CompanyForJsonLd,
+} from "@/lib/company-jsonld";
 
 // ヘッダー内の <UserMenu /> が cookies() を読んでログイン状態を出すため、
 // ページ全体を動的レンダリングする必要がある。ISR (revalidate) は
@@ -167,8 +174,42 @@ export default async function CompanyDetailPage({
   // この企業に紐付いた公開記事（コンテンツタブ用）
   const linkedArticles = await getPublishedArticlesForCompany(company.id);
 
+  // JSON-LD（Organization + Dataset + BreadcrumbList）。
+  // 一次データ（EDINET 有報）への sameAs / isBasedOn を明示することで、
+  // AI Overview / Knowledge Graph 統合・Google Dataset Search の発見対象になる。
+  const companyForJsonLd: CompanyForJsonLd = {
+    edinetCode: company.edinetCode,
+    name: company.name,
+    nameKana: company.nameKana,
+    websiteUrl: company.websiteUrl,
+    industryCode: company.industryCode,
+    industryName: company.industryName,
+    listedMarket: company.listedMarket,
+    foundedYear: company.foundedYear,
+    headquarters: company.headquarters,
+    description: company.description,
+    summary: company.summary,
+    latestDocId: latest.docId ?? null,
+    latestFiscalYear: latest.fiscalYear ?? null,
+  };
+  const orgJsonLd = buildOrganizationJsonLd(companyForJsonLd);
+  const datasetJsonLd = buildCompanyDatasetJsonLd(companyForJsonLd);
+  const breadcrumbJsonLd = buildCompanyBreadcrumbJsonLd(companyForJsonLd);
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdToScript(orgJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdToScript(datasetJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdToScript(breadcrumbJsonLd) }}
+      />
       <Header />
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <CompanyHero
